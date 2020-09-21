@@ -1,4 +1,6 @@
-# AI_in-Criminal_Justice
+# Ethics4NextGen AI Hackathon
+
+## AI_in_Criminal_Justice
 
 ### Problem Statement
 - The risk assessment tool that judges
