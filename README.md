@@ -34,6 +34,9 @@ an individual should have been judged
 ### Blogpost
 https://www.dataethics4all.org/posts/gavel-20
 
+### Website Link
+https://bijalm99.github.io/Criminal-Justice-Team-5/index.html?
+
 ### Youtube link : 
 https://youtu.be/hdyhdyFovS4
 
