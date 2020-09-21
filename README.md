@@ -33,3 +33,7 @@ an individual should have been judged
 
 ### Youtube link : 
 https://youtu.be/hdyhdyFovS4
+
+### Other Important Links
+- https://www.bjs.gov/content/pub/pdf/ji16.pdf
+- https://www.pretrial.org/get-involved/learn-more/why-we-need-pretrial-reform/#:~:text=Six%20out%20of%2010%20people,population%20growth%20between%202000%2D2014
