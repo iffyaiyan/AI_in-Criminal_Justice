@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>CJ Project 5 Demo</title>
+  <link href="https://fonts.googleapis.com/css?family=Montserrat+Alternates:300,400,500,600" rel="stylesheet"><link rel='stylesheet' href='https://maxcdn.icons8.com/fonts/line-awesome/1.1/css/line-awesome-font-awesome.min.css'><link rel="stylesheet" href="./style.css">
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<main>
+	<div class="row">
+		<div class="column-one">
+			<h1 style= "color: #4167a8; ">Why our score?</h1>
+			<h2 style="color: #4167a8; margin-bottom: 20px">Let's see how the error rate by <strong>race</strong> changes between the algorithms. <br><br>Please select from the following:</h2>
+			<div class="row" style="margin-bottom: 6px">
+				<div class="column-variable">
+					<form action="AAError.html">
+						<button class="variable-options" style="background-color: #4167a8; color: white" type="submit">African American</button>
+					</form>
+				</div>
+				<div class="column-variable">
+					<form action="NAError.html">
+						<button class="variable-options" type="submit">Native American</button>
+					</form>
+				</div>
+			</div>
+			<div class="row" style="margin-bottom: 6px">
+				<div class="column-variable">
+					<form action="HError.html">
+						<button class="variable-options" type="submit">Hispanic</button>
+					</form>
+				</div>
+				<div class="column-variable">
+					<form action="AError.html">
+						<button class="variable-options" type="submit">Asian</button>
+					</form>
+				</div>
+			</div>
+			<div class="row" style="margin-bottom: 6px">
+				<div class="column-variable">
+					<form action="CError.html">
+						<button class="variable-options" type="submit">Caucasian</button>
+					</form>
+				</div>
+				<div class="column-variable">
+					<form action="OtherError.html">
+						<button class="variable-options" type="submit">Other</button>
+					</form>
+				</div>
+			</div>
+
+		</div>
+		<div class="column-two fade-in">
+			<h1>COMPAS Algorithm</h1>
+			<div class="score-card" style="padding: 5%; color: #CD5C5C">
+				<h1>31.7%</h1><br><h2 style="font-size: 1em">Error for African Americans</h2></h1>
+			</div>
+		</div>
+		<div class="column-two fade-in">
+			<h1>Our Algorithm</h1>
+			<div class="score-card" style="padding: 5%; color: #458B00">
+				<h1 >21.8%</h1><br><h2 style="font-size: 1em">Error for African Americans</h2></h1>
+			</div>
+		</div>		
+		<div class="column-three fade-in">
+			<form action="FactSheet.html">
+				<button class="button-style2" type="submit"><strong>Learn more</strong> (Preview of Fact Sheet)</button>
+			</form>
+			<form action="index.html">
+				<button class="button-style2" type="submit"><strong>Go back to Case ID screen</strong></button>
+			</form>	
+		</div>
+	</div>
+</main>
+<!-- partial -->
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/1.9.1/jquery.min.js'></script><script  src="./script.js"></script>
+
+</body>
+</html>

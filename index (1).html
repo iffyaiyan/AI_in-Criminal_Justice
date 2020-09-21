@@ -1,0 +1,678 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><html><head><META http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div>
+
+
+<div>
+
+
+
+
+<div>
+
+<div>
+<button type="button"><span>Code</span> <span></span></button>
+<ul style="min-width:50px">
+<li><a href="#0.1_">Show All Code</a></li>
+<li><a href="#0.1_">Hide All Code</a></li>
+<li></li>
+<li><a href="#0.1_">Download Rmd</a></li>
+</ul>
+</div>
+
+
+
+<h1>Criminal Justice- Group 5 / Tackling Bias in Compas Algorithm</h1>
+
+</div>
+
+
+
+
+
+
+<pre><code># Author: Jonas Isenegger
+# Last update: 20.09.2020
+
+#Acknowledgment: 
+#-Original Study that highlighted the bias as well as the data can be found here : <a href="https://github.com/propublica/compas-analysis#-This" target="_blank">https://github.com/propublica/<wbr>compas-analysis
+#-This</a> has been done during the DataEthics for Next Gen AI two days hackathon. It is a proof of concept and not a final product. Do not share or use without permission from the author.
+</code></pre>
+
+
+
+
+
+
+<pre><code>
+
+#Install libraries
+# install.packages(&quot;dplyr&quot;)
+# install.packages(&quot;ggplot2&quot;)
+# install.packages(&quot;<wbr>DataExplorer&quot;)
+# install.packages(&#39;fairness&#39;)
+# install.packages(&quot;survival&quot;)
+# install.packages(&quot;ggfortify&quot;)
+# install.packages(&quot;h2o&quot;)
+# install.packages(&quot;sqldf&quot;)
+# install.packages(&quot;reshape&quot;)
+  
+
+
+#Load libraries
+library(dplyr)</code></pre>
+
+
+<pre><code>
+Attachement du package : ã¤¼ã¸±dplyrã¤¼ã¸²
+
+The following objects are masked from ã¤¼ã¸±package:statsã¤¼ã¸²:
+
+    filter, lag
+
+The following objects are masked from ã¤¼ã¸±package:baseã¤¼ã¸²:
+
+    intersect, setdiff, setequal, union</code></pre>
+
+
+<pre><code>library(ggplot2)
+library(DataExplorer)</code></pre>
+
+
+<pre><code>Registered S3 method overwritten by &#39;data.table&#39;:
+  method           from
+  print.data.table     
+Registered S3 methods overwritten by &#39;htmltools&#39;:
+  method               from         
+  print.html           tools:rstudio
+  print.shiny.tag      tools:rstudio
+  print.shiny.tag.list tools:rstudio
+Registered S3 method overwritten by &#39;htmlwidgets&#39;:
+  method           from         
+  print.htmlwidget tools:rstudio</code></pre>
+
+
+<pre><code>library(fairness)
+library(survival)
+library(ggfortify)
+library(h2o)</code></pre>
+
+
+<pre><code>
+------------------------------<wbr>------------------------------<wbr>----------
+
+Your next step is to start H2O:
+    &gt; h2o.init()
+
+For H2O package documentation, ask for help:
+    &gt; ??h2o
+
+After starting H2O, you can use the Web UI at <a href="http://localhost:54321" target="_blank">http://localhost:54321</a>
+For more information visit <a href="http://docs.h2o.ai" target="_blank">http://docs.h2o.ai</a>
+
+------------------------------<wbr>------------------------------<wbr>----------
+
+
+Attachement du package : ã¤¼ã¸±h2oã¤¼ã¸²
+
+The following objects are masked from ã¤¼ã¸±package:statsã¤¼ã¸²:
+
+    cor, sd, var
+
+The following objects are masked from ã¤¼ã¸±package:baseã¤¼ã¸²:
+
+    %*%, %in%, &amp;&amp;, ||, apply, as.factor, as.numeric, colnames, colnames&lt;-, ifelse, is.character, is.factor, is.numeric, log,
+    log10, log1p, log2, round, signif, trunc</code></pre>
+
+
+<pre><code>library(sqldf)</code></pre>
+
+
+<pre><code>Le chargement a næ¼ã¸¹cessitæ¼ã¸¹ le package : gsubfn
+Le chargement a næ¼ã¸¹cessitæ¼ã¸¹ le package : proto
+Le chargement a næ¼ã¸¹cessitæ¼ã¸¹ le package : RSQLite</code></pre>
+
+
+<pre><code>library(reshape)</code></pre>
+
+
+<pre><code>
+Attachement du package : ã¤¼ã¸±reshapeã¤¼ã¸²
+
+The following object is masked from ã¤¼ã¸±package:dplyrã¤¼ã¸²:
+
+    rename</code></pre>
+
+
+<pre><code>project_path &lt;- &quot;C:/Users/Jonas/Documents/<wbr>Gradiant AI/AI Ethics/Datasets_crime/compas-<wbr>analysis&quot;</code></pre>
+
+
+
+
+
+
+<pre><code>
+#--- Some Custom Functions--- 
+
+custom.summary.cont &lt;- function(dataFrame){
+  
+  n.miss        &lt;- unlist(lapply(dataFrame, function(x){length(which(<a href="http://is.na" target="_blank">is.na</a><wbr>(x)))}))
+  n.non.miss    &lt;- rep(nrow(dataFrame), ncol(dataFrame)) - n.miss
+  perc.miss &lt;- (n.miss/rep(nrow(dataFrame), ncol(dataFrame)))*100
+  unique.values &lt;- unlist(lapply(dataFrame, function(x){return(length(<wbr>unique(x)))}))
+  n.max         &lt;- unlist(lapply(dataFrame, max, na.rm = TRUE))
+  n.min         &lt;- unlist(lapply(dataFrame, min, na.rm = TRUE))
+  n.mean        &lt;- unlist(lapply(dataFrame, mean, na.rm = TRUE))
+  n.median      &lt;- unlist(lapply(dataFrame, median, na.rm = TRUE))
+  n.IQR         &lt;- unlist(lapply(dataFrame, IQR, na.rm = TRUE))
+  <a href="http://n.sd" target="_blank">n.sd</a>          &lt;- unlist(lapply(dataFrame, sd, na.rm = TRUE))
+  df.quantile   &lt;- do.call(rbind, lapply(dataFrame, quantile, probs=seq(0,1,0.1), na.rm=TRUE))
+  
+  colnames(df.quantile) &lt;- paste(&quot;P&quot;, colnames(df.quantile), sep=&quot;_&quot;)
+  df.result             &lt;- cbind(n.non.miss, n.miss, perc.miss, unique.values, n.max, n.min, n.mean, n.median, n.IQR, <a href="http://n.sd" target="_blank">n.sd</a>, df.quantile)
+  colnames(df.result)   &lt;- c(&quot;N&quot;, &quot;nb_of_Miss&quot;, &quot;pct_of_Missing&quot;,&quot;Unique_<wbr>Values&quot;,&quot;Max&quot;, &quot;Min&quot;, &quot;Mean&quot;, &quot;Median&quot;, &quot;IQR&quot;,&quot;SD&quot; ,colnames(df.quantile))
+  
+  return(df.result)
+}
+
+<a href="http://custom.summary.cat" target="_blank">custom.summary.cat</a> &lt;- function(dataFrame){
+  
+  n.miss        &lt;- unlist(lapply(dataFrame, function(x){length(which(x==&#39;&#39;<wbr>))}))
+  n.non.miss    &lt;- rep(nrow(dataFrame), ncol(dataFrame)) - n.miss
+  perc.miss &lt;- (n.miss/rep(nrow(dataFrame), ncol(dataFrame)))*100
+  unique.values &lt;- unlist(lapply(dataFrame, function(x){return(length(<wbr>unique(x)))}))
+  
+  df.result &lt;- cbind(n.non.miss, n.miss, perc.miss, unique.values)
+  colnames(df.result) &lt;- c(&quot;N&quot;, &quot;# of Miss&quot;, &quot;% of Missing&quot;, &quot;Unique&quot;)
+  return(df.result)
+  
+}</code></pre>
+
+
+
+
+
+
+<pre><code>##load the dataset
+
+dataset&lt;- read.csv(&quot;~/Gradiant AI/AI Ethics/Datasets_crime/compas-<wbr>analysis/compas-scores-two-<wbr>years.csv&quot;)
+
+#--- Convert integer and integer64 variables to numeric type ---
+dataset[sapply(dataset, class) %in% c(&quot;integer&quot;,&quot;integer64&quot;)] &lt;- lapply(dataset[sapply(dataset, class) %in% c(&quot;integer&quot;,&quot;integer64&quot;)], as.numeric)  
+
+#--- Transform character to factor ---
+df.data=as.data.frame(unclass(<wbr>dataset))
+</code></pre>
+
+
+
+
+
+
+<pre><code>
+
+
+#--- Extracting the default class of all the variables --- 
+
+var.names.class     &lt;- unlist(lapply(df.data, class))
+df.var.names.class  &lt;- cbind.data.frame(names(var.<wbr>names.class), var.names.class)
+
+colnames(df.var.names.class) &lt;- c(&quot;names&quot;, &quot;class&quot;)
+rownames(df.var.names.class) &lt;- NULL
+
+#--- Extracting unique levels for each variable ---
+
+unique.values         &lt;- unlist(lapply(df.data, function(x){return(length(<wbr>unique(x)))}))
+df.var.unique.values  &lt;- cbind.data.frame(names(unique.<wbr>values), unique.values)
+
+colnames(df.var.unique.values) &lt;- c(&quot;names&quot;, &quot;unique_values&quot;)
+rownames(df.var.unique.values) &lt;- NULL
+
+
+#--- Summary statistics ---
+
+index.numeric &lt;- which(var.names.class %in% c(&#39;numeric&#39;,&#39;integer&#39;,&#39;num&#39;))
+index.factor &lt;- which(var.names.class %in% c(&#39;factor&#39;))
+
+numeric.vars &lt;- colnames(df.data[,index.<wbr>numeric])
+factor.vars &lt;- colnames(df.data[,index.<wbr>factor])
+
+
+stats.cont.vars &lt;- as.data.frame(custom.summary.<wbr>cont(df.data[,index.numeric]))
+stats.cat.vars  &lt;- as.data.frame(<a href="http://custom.summary.cat" target="_blank">custom.summary.<wbr>cat</a>(df.data[,index.factor]))
+
+write.csv(stats.cont.vars, paste0(project_path,&quot;/R_<wbr>OUTPUT/Continuous_Variables_<wbr>Summary.csv&quot;))
+write.csv(stats.cat.vars, paste0(project_path,&quot;/R_<wbr>OUTPUT/Categorical_Variables_<wbr>Summary.csv&quot;))
+
+write.csv(df.var.names.class,<wbr>paste0(project_path,&quot;/R_<wbr>OUTPUT/df_var_names_class.csv&quot;<wbr>))
+
+
+#Identify variables with 100% missing data
+var.only.miss &lt;- row.names(stats.cont.vars[<wbr>which(stats.cont.vars$pct_of_<wbr>Missing == 100),])
+
+
+###----High level automated graphiques---###
+
+sqldf(&quot;select race, sum(two_year_recid)*1.00/<wbr>count(*) from &#39;df.data&#39; group by 1 order by 1&quot;)
+
+plot_missing(df.data)
+plot_bar(df.data)
+plot_histogram(df.data)
+plot_qq(df.data, sampled_rows = 1000L)
+qq_data= df.data[,c(&quot;decile_score&quot;,&quot;<wbr>decile_score.1&quot;,&quot;score_text&quot;, &quot;two_year_recid&quot;,&quot;sex&quot;,&quot;age&quot; ,&quot;age_cat&quot;,&quot;race&quot;, &quot;juv_fel_count&quot;,&quot;juv_misd_<wbr>count&quot;,&quot;juv_other_count&quot;,&quot;<wbr>priors_count&quot;,&quot;c_charge_<wbr>degree&quot;,&quot;c_charge_desc&quot;,&quot;<wbr>priors_count.1&quot;)]
+plot_qq(qq_data, by = &quot;race&quot;, sampled_rows = 5000L)
+
+
+plot_correlation(qq_data, maxcat = 7L)
+
+# We can see that African American population is younger and committed more juvenile crime in average (link to socio-demo??). In addition , African American tend to have a higher correlation with charge degree (F) while caucasian have a higher correlation with charge degree (M). We did not look if the difference is significant at this stage, those are just personal notes.
+</code></pre>
+
+
+
+<p>NOTES:</p>
+<p>We can see that the dataset is not balanced between âSexâ and &quot;Race. This could, and will, lead to some bias in terms of the model ability to perform for the minority populations.</p>
+<p>We can also see that the âactualâ reoffense rate is different within the âraceâ and âSexâ. The difference of reoffense rate is not the scope of this exercise as we would require much more data to control for absent factors that influence crime such as socio-economic variables. We also have to mention that the difference of reoffense rate between the races might also be due to the vicious circle of biased predictive policing algorithm. One could validate our assumption by looking at the crime rate standardized by the time spend on certain neighborhood having a majority of African Americans or Caucasian people.</p>
+<p>This code will not address the underlying bias in the data but the bias made by the COMPAS algorithm.</p>
+<p>In this code, we will: 1) Show how the COMPAS Algorithm tend to be more conservative with African Americans (meaning that it will tend to overly score African Americans with an High risk compared to Caucasians) 2) Propose a correction of the algorithm to ensure that the so called âraceâ are equal in terms of the mistakes made by the algorithm 3) Show the difference in score ..</p>
+<p>Limitations: Violent crimes are not analysed specifically due to time constraints Bias against sex wonât be analyse as well due to time constraints</p>
+
+
+
+<pre><code>
+#--- Define your target variable name [Mandatory input] ---
+
+trgt_var=&quot;two_year_recid&quot;
+
+#--- Define columns to exclude from explanatory variables BUT link back to predictions afterwards ---
+    
+    trgt.short &lt;- c(&#39;id&#39;,
+                    &#39;decile_score&#39;,
+                   &#39;decile_score.1&#39;,
+                    &#39;score_text&#39;,
+                    &#39;start&#39;,
+                    &#39;end&#39;,
+                    &#39;event&#39;,
+                    trgt_var
+                    )
+
+#--- Define columns to exclude from explanatory variables ---
+
+    trgt.long &lt;- c(trgt.short,
+                    &#39;name&#39;,
+                    &#39;first&#39;,
+                    &#39;last&#39;,
+                    &#39;dob&#39;,
+                    &#39;days_b_screening_arrest&#39;,
+                    &#39;c_jail_in&#39;,
+                    &#39;c_jail_out&#39;,
+                    &#39;c_case_number&#39;,
+                    &#39;c_days_from_compas&#39;,
+                    &#39;r_case_number&#39;,
+                    &#39;r_charge_degree&#39;,
+                    &#39;r_days_from_arrest&#39;,
+                    &#39;r_offense_date&#39;,
+                    &#39;r_charge_desc&#39;,
+                    &#39;r_jail_in&#39;,
+                    &#39;r_jail_out&#39;,
+                    &#39;violent_recid&#39;,
+                    &#39;is_violent_recid&#39;,
+                    &#39;vr_case_number&#39;,
+                    &#39;vr_charge_degree&#39;,
+                    &#39;vr_offense_date&#39;,
+                    &#39;vr_charge_desc&#39;,
+                    &#39;type_of_assessment&#39;,
+                    &#39;screening_date&#39;,
+                    &#39;v_type_of_assessment&#39;,
+                    &#39;v_decile_score&#39;,
+                    &#39;v_score_text&#39;,
+                    &#39;v_screening_date&#39;,
+                    &#39;in_custody&#39;,
+                    &#39;out_custody&#39;,
+                   &#39;is_recid&#39;,
+                   &#39;compas_screening_date&#39;,
+                   &#39;c_offense_date&#39;,
+                   &#39;c_arrest_date&#39;
+                   
+                      )
+  
+  #--- setup index for target variables---
+
+index.trgt.short &lt;- which(colnames(df.data) %in% trgt.short )    
+index.trgt.long &lt;- which(colnames(df.data) %in% trgt.long ) 
+
+### factor that should be dates
+# &#39;compas_screening_date&#39;,
+# &#39;c_jail_in&#39;,
+# &#39;c_jail_out&#39;,
+# &#39;c_offense_date&#39;,
+# &#39;c_arrest_date&#39;,
+# &#39;screening_date&#39;,
+# &#39;in_custody&#39;,
+# &#39;out_custody&#39;,
+
+
+df.data.fe&lt;- cbind(df.data[ ,index.trgt.short],df.data[,-<wbr>index.trgt.long])
+colnames(df.data.fe)</code></pre>
+
+
+<pre><code> [1] &quot;id&quot;              &quot;decile_score&quot;    &quot;decile_score.1&quot;  &quot;score_text&quot;      &quot;start&quot;           &quot;end&quot;             &quot;event&quot;          
+ [8] &quot;two_year_recid&quot;  &quot;sex&quot;             &quot;age&quot;             &quot;age_cat&quot;         &quot;race&quot;            &quot;juv_fel_count&quot;   &quot;juv_misd_count&quot; 
+[15] &quot;juv_other_count&quot; &quot;priors_count&quot;    &quot;c_charge_degree&quot; &quot;c_charge_desc&quot;   &quot;priors_count.1&quot; </code></pre>
+
+
+
+
+
+
+<pre><code>
+sqldf(&quot;select distinct score_text, decile_score from &#39;df.data.fe&#39; order by 2 &quot;)</code></pre>
+
+
+<div>
+
+</div>
+
+
+<pre><code># Note: We will assume the member who scores medium and High are predicted as recidiv=1
+
+
+#--- Apply desired threshold ---
+# Proxy of decision for COMPAS score
+    df.data.fe$pred_compas=ifelse(<wbr>df.data.fe$decile_score &gt;= 5 , 1, 0) 
+# Proxy of &quot;probability&quot; to explore the impact of different cutoff thresholds on the errors/performance
+    df.data.fe$decile_score_pct=<wbr>df.data.fe$decile_score/10
+    
+    
+    
+#--- Build prediction dataset
+    a=as.data.frame(df.data.fe$id) #link back to member id
+    eval(parse(text=paste0(&quot;b=as.<wbr>data.frame(df.data.fe$&quot;,trgt_<wbr>var,&quot;)&quot;))) #link back to taret variable
+    c=as.data.frame(df.data.fe$<wbr>decile_score_pct) # include probability 
+    d=as.data.frame(as.numeric(df.<wbr>data.fe$pred_compas)) # keep automated predicted value based on h2o optimal f1/f2 functions
+    e=as.data.frame(df.data.fe$<wbr>race)
+    f=as.data.frame(df.data.fe$<wbr>sex)
+   
+    pred_table=as.data.frame(<wbr>cbind(a,b,c,d,e,f))
+    rm(a,b,c,d,e,f)
+    
+    #Rename columns
+      colnames(pred_table)=c(&quot;id&quot;,<wbr>paste0(trgt_var),&quot;decile_<wbr>score_pct&quot;,&quot;pred_compas&quot;,&quot;<wbr>race&quot;,&quot;gender&quot;)
+
+ #-- Compute some performance metrics (including TPR and FNR) for several cutoffs ---
+  
+    ## Function  
+         find_threshold &lt;- function(pred_table, from=0.00, to=1, by=0.01) {
+  result=NULL
+    for (threshold in seq(from=from, to=to, by=by)) {
+     v &lt;- rep(NA, nrow(pred_table))
+      v &lt;- ifelse(pred_table$decile_<wbr>score_pct &gt;= threshold &amp; pred_table$two_year_recid == 1, &quot;TP&quot;, v)
+      v &lt;- ifelse(pred_table$decile_<wbr>score_pct &gt;= threshold &amp; pred_table$two_year_recid == 0, &quot;FP&quot;, v)
+      v &lt;- ifelse(pred_table$decile_<wbr>score_pct &lt; threshold &amp; pred_table$two_year_recid == 1, &quot;FN&quot;, v)
+      v &lt;- ifelse(pred_table$decile_<wbr>score_pct &lt; threshold &amp; pred_table$two_year_recid == 0, &quot;TN&quot;, v)
+
+      gd_cl_rate=round(sum(v %in% c(&quot;TP&quot;,&quot;TN&quot;))/length(v),<wbr>digits=4)
+      precision=round(sum(v %in% c(&quot;TP&quot;))/sum(v %in% c(&quot;TP&quot;,&quot;FP&quot;)),digits=4)
+      true_neg_rate=round(sum(v %in% c(&quot;TN&quot;))/sum(v %in% c(&quot;TN&quot;,&quot;FN&quot;)),digits=4)
+      t_captured=round(sum(v %in% c(&quot;TP&quot;))/sum(v %in% c(&quot;TP&quot;,&quot;FN&quot;)),digits=4)
+      pct_ctct=round(sum(v %in% c(&quot;TP&quot;,&quot;FP&quot;))/length(v),<wbr>digits=4)
+      FPR=round(sum(v %in% c(&quot;FP&quot;))/sum(v %in% c(&quot;TN&quot;,&quot;FP&quot;)),digits=4)
+      FNR=round(sum(v %in% c(&quot;FN&quot;))/sum(v %in% c(&quot;FN&quot;,&quot;TP&quot;)),digits=4)
+      #lift=round((precision-(sum(v %in% c(&quot;TP&quot;,&quot;FN&quot;))/length(v)))/(<wbr>sum(v %in% c(&quot;TP&quot;,&quot;FN&quot;))/length(v)),<wbr>digits=4)
+      lift=t_captured/pct_ctct
+      
+      
+      perf.matrix=data.frame(<wbr>threshold,gd_cl_rate,lift,<wbr>precision,true_neg_rate,t_<wbr>captured,pct_ctct,FPR,FNR)
+
+      result=rbind(result,perf.<wbr>matrix)
+
+    }
+  return(result)
+         }
+    
+  
+    
+  #Use function for overall
+    find_threshold_table=find_<wbr>threshold( pred_table=pred_table) 
+  # Look at performances per group  
+    find_threshold_table_African_<wbr>American=find_threshold( pred_table=pred_table[pred_<wbr>table$race==&quot;African-American&quot;<wbr>,])
+    find_threshold_table_<wbr>Caucasian=find_threshold( pred_table=pred_table[pred_<wbr>table$race==&quot;Caucasian&quot;,])
+    find_threshold_table_Other=<wbr>find_threshold( pred_table=pred_table[pred_<wbr>table$race==&quot;Other&quot;,])
+    find_threshold_table_Hispanic=<wbr>find_threshold( pred_table=pred_table[pred_<wbr>table$race==&quot;Hispanic&quot;,])
+    find_threshold_table_Native_<wbr>American=find_threshold( pred_table=pred_table[pred_<wbr>table$race==&quot;Native American&quot;,])
+    find_threshold_table_Asian=<wbr>find_threshold( pred_table=pred_table[pred_<wbr>table$race==&quot;Asian&quot;,])
+ 
+
+    #save output:
+      write.csv(find_threshold_<wbr>table_African_American,paste0(<wbr>project_path,&quot;/R_OUTPUT/find_<wbr>threshold_table_African_<wbr>American.csv&quot;));
+      write.csv(find_threshold_<wbr>table_Caucasian,paste0(<wbr>project_path,&quot;/R_OUTPUT/find_<wbr>threshold_table_Caucasian.csv&quot;<wbr>));
+      write.csv(find_threshold_<wbr>table_Other,paste0(project_<wbr>path,&quot;/R_OUTPUT/find_<wbr>threshold_table_Other.csv&quot;));
+      write.csv(find_threshold_<wbr>table_Hispanic,paste0(project_<wbr>path,&quot;/R_OUTPUT/find_<wbr>threshold_table_Hispanic.csv&quot;)<wbr>);
+      write.csv(find_threshold_<wbr>table_Native_American,paste0(<wbr>project_path,&quot;/R_OUTPUT/find_<wbr>threshold_table_Native_<wbr>American.csv&quot;));
+      write.csv(find_threshold_<wbr>table_Asian,paste0(project_<wbr>path,&quot;/R_OUTPUT/find_<wbr>threshold_table_Asian.csv&quot;));
+    
+    #Apply the same threshold to all groups
+    perf_overall=as.data.frame(<wbr>cbind(&#39;Overall&#39;,find_<wbr>threshold_table[find_<wbr>threshold_table$threshold==0.<wbr>5,]))
+    perf_African_American=as.data.<wbr>frame(cbind(&#39;African American&#39;,find_threshold_<wbr>table_African_American[find_<wbr>threshold_table_African_<wbr>American$threshold==0.5,]))
+    perf_Caucasian=as.data.frame(<wbr>cbind(&#39;Caucasian&#39;,find_<wbr>threshold_table_Caucasian[<wbr>find_threshold_table_<wbr>Caucasian$threshold==0.5,]))
+    perf_Other=as.data.frame(<wbr>cbind(&#39;Other&#39;,find_threshold_<wbr>table_Other[find_threshold_<wbr>table_Other$threshold==0.5,]))
+    perf_Hispanic=as.data.frame(<wbr>cbind(&#39;Hispanic&#39;,find_<wbr>threshold_table_Hispanic[find_<wbr>threshold_table_Hispanic$<wbr>threshold==0.5,]))
+    perf_Native_American=as.data.<wbr>frame(cbind(&#39;Native American&#39;,find_threshold_<wbr>table_Native_American[find_<wbr>threshold_table_Native_<wbr>American$threshold==0.5,]))
+    perf_Asian=as.data.frame(<wbr>cbind(&#39;Asian&#39;,find_threshold_<wbr>table_Asian[find_threshold_<wbr>table_Asian$threshold==0.5,]))
+    
+    ##rename columns
+    colnames(perf_overall)[1]=c(&quot;<wbr>group&quot;)
+    colnames(perf_African_<wbr>American)[1]=c(&quot;group&quot;)
+    colnames(perf_Caucasian)[1]=c(<wbr>&quot;group&quot;)
+    colnames(perf_Other)[1]=c(&quot;<wbr>group&quot;)
+    colnames(perf_Hispanic)[1]=c(&quot;<wbr>group&quot;)
+    colnames(perf_Native_American)<wbr>[1]=c(&quot;group&quot;)
+    colnames(perf_Asian)[1]=c(&quot;<wbr>group&quot;)
+    
+    
+    #Merge performance metrics for given threshold
+    perf_all=as.data.frame(rbind(<wbr>perf_overall,perf_African_<wbr>American,perf_Caucasian,perf_<wbr>Other,perf_Hispanic,perf_<wbr>Native_American,perf_Asian))
+    head(perf_all)</code></pre>
+
+
+<div>
+
+</div>
+
+
+<pre><code>    
+    
+    #FPR : Wrongly accused
+    
+    #FNR: Missout
+    
+  
+    print(perf_all)</code></pre>
+
+
+<div>
+
+</div>
+
+
+<pre><code>    
+    #Risk of wrongly assigning med/high risk to each group
+    ggplot(perf_all,aes(x=group,y=<wbr>FPR))+geom_bar(stat=&#39;identity&#39;<wbr>)</code></pre>
+
+
+<p><img></p>
+
+
+<pre><code>    
+    #Risk of wrongly assigning a low score ( missing to detect someone who will re-offence) 
+    ggplot(perf_all,aes(x=group,y=<wbr>FNR))+geom_bar(stat=&#39;identity&#39;<wbr>)
+</code></pre>
+
+
+<p><img></p>
+
+
+
+<p>As we can see, the COMPAS algorithm is not fair amongst races: -45% of African American that were wrongly scored as Med/High (but did not recidiv within the following 2 years) while only 23% for Caucasians. -47% of Caucasians that were scored as low risk did recidiv within 2 years while only 27% for African American.</p>
+<p>How can we make the algorithm more fair?</p>
+<p>It is not an easy task to build an algorithm that would maximize the performance while treating all races, gender equally. There is a tradeoff, and, as a society, we need to choose what should we prioritize.</p>
+<p>In the next section, we will show how fine tuning the algorithm for each group (applying a different cutoff) will allow us to both keep a decent performance (compare to the baseline - COMPAS) while having an AI more fair regarding the distribution of errors amongst races.</p>
+
+
+
+<div>
+
+</div>
+
+
+<pre><code>
+      
+        
+  #Create Performance table for &quot;normalized&quot; score  
+      #NOTES: The cutoffs were chosen in order to have an equal error rate amongst races..
+    
+    perf_overall=as.data.frame(<wbr>cbind(&#39;Overall&#39;,find_<wbr>threshold_table[find_<wbr>threshold_table$threshold==0.<wbr>5,]))
+    perf_African_American=as.data.<wbr>frame(cbind(&#39;African American&#39;,find_threshold_<wbr>table_African_American[find_<wbr>threshold_table_African_<wbr>American$threshold==0.56,]))
+    perf_Caucasian=as.data.frame(<wbr>cbind(&#39;Caucasian&#39;,find_<wbr>threshold_table_Caucasian[<wbr>find_threshold_table_<wbr>Caucasian$threshold==0.43,]))
+    perf_Other=as.data.frame(<wbr>cbind(&#39;Other&#39;,find_threshold_<wbr>table_Other[find_threshold_<wbr>table_Other$threshold==0.43,])<wbr>)
+    perf_Hispanic=as.data.frame(<wbr>cbind(&#39;Hispanic&#39;,find_<wbr>threshold_table_Hispanic[find_<wbr>threshold_table_Hispanic$<wbr>threshold==0.44,]))
+    perf_Native_American=as.data.<wbr>frame(cbind(&#39;Native American&#39;,find_threshold_<wbr>table_Native_American[find_<wbr>threshold_table_Native_<wbr>American$threshold==0.59,]))
+    perf_Asian=as.data.frame(<wbr>cbind(&#39;Asian&#39;,find_threshold_<wbr>table_Asian[find_threshold_<wbr>table_Asian$threshold==0.4,]))
+    
+    colnames(perf_overall)[1]=c(&quot;<wbr>group&quot;)
+    colnames(perf_African_<wbr>American)[1]=c(&quot;group&quot;)
+    colnames(perf_Caucasian)[1]=c(<wbr>&quot;group&quot;)
+    colnames(perf_Other)[1]=c(&quot;<wbr>group&quot;)
+    colnames(perf_Hispanic)[1]=c(&quot;<wbr>group&quot;)
+    colnames(perf_Native_American)<wbr>[1]=c(&quot;group&quot;)
+    colnames(perf_Asian)[1]=c(&quot;<wbr>group&quot;)
+    
+    
+    #Merge performances metrics
+    perf_all_h2o_nrmlz=as.data.<wbr>frame(rbind(perf_African_<wbr>American,perf_Caucasian,perf_<wbr>Other,perf_Hispanic,perf_<wbr>Native_American,perf_Asian))
+    head(perf_all_h2o_nrmlz)
+
+    </code></pre>
+
+
+
+<p>We can see an improvement in terms of bias amongst races.</p>
+<p>For a reduction in Good classification rate of less than 1% (0.75 for Caucasian an 0.28% for African American), we reduced drastically the bias of error. -With COMPAS algorithm, African American were 2.14 times more likely to be scored erroneously as future recidivist when compared to African American. African American have now the same chance of being faulty scored as future recidivist by the algorithm (22%). -With COMPAS algorithm, Caucasians were 2.25 times more likely than African American to be erroneously scored as non future recidivist (low). This number is now back to 1.06.</p>
+<p>Limitations: Not enough data yet in the validation set for Asian and Native American communities.. might want to increase it an re-run it Would need to do the same exercise for Gender</p>
+
+
+
+<pre><code>
+
+#Apply deciles by group in order to see the change in the score, decile? Will work for showcase but would need to put more thinking into this to understand the impact.
+
+pred.h20.case= mutate(pred_table, decile_rank = ntile(pred_table$decile_score_<wbr>pct,10))
+
+
+#### quantile rank of the column by group
+pred.h20.case= pred.h20.case %&gt;% group_by(race) %&gt;%
+  mutate(decile_rank_by_Item_<wbr>group = ntile(decile_score_pct,10))
+
+colnames(pred.h20.case)[7:8]=<wbr>c(&#39;Old Score Decile&#39;, &#39;New Score Decile&#39;)
+
+#Apply different thresholds (ours and compas one)
+
+#Use the case in the articles where the discrepencies between two people were absurd
+
+sqldf(&quot;select * 
+      from &#39;pred.h20.case&#39;
+      where decile_score_pct&gt;0.43 and decile_score_pct &lt; 0.58 
+            and id in (2593,10807)
+        order by decile_score_pct desc&quot;)</code></pre>
+
+
+<div>
+
+</div>
+
+
+<pre><code>
+
+# In this example, the Female, African-American would go from 7 to 6  (stay Medium) and Caucasian 7 to 8 (Medium to high)
+### For the purpose of the demo, would be good to find an example with a switch.. But, really, one example doesn&#39;t say anything about the algo, the FNR, TPR does.
+</code></pre>
+
+
+
+<div>LS0tDQp0aXRsZTogIkNyaW1pbmFsIE<wbr>p1c3RpY2UtIEdyb3VwIDUgLyBUYWNr<wbr>bGluZyBCaWFzIGluIENvbXBhcyBBbG<wbr>dvcml0aG0iDQpvdXRwdXQ6IGh0bWxf<wbr>bm90ZWJvb2sNCi0tLQ0KDQpgYGB7cn<wbr>0NCiMgQXV0aG9yOiBKb25hcyBJc2Vu<wbr>ZWdnZXINCiMgTGFzdCB1cGRhdGU6ID<wbr>IxLjA5LjIwMjANCg0KI0Fja25vd2xl<wbr>ZGdtZW50OiANCiMtT3JpZ2luYWwgU3<wbr>R1ZHkgdGhhdCBoaWdobGlnaHRlZCB0<wbr>aGUgYmlhcyBhcyB3ZWxsIGFzIHRoZS<wbr>BkYXRhIGNhbiBiZSBmb3VuZCBoZXJl<wbr>IDogaHR0cHM6Ly9naXRodWIuY29tL3<wbr>Byb3B1YmxpY2EvY29tcGFzLWFuYWx5<wbr>c2lzDQojLVRoaXMgaGFzIGJlZW4gZG<wbr>9uZSBkdXJpbmcgdGhlIERhdGFFdGhp<wbr>Y3MgZm9yIE5leHQgR2VuIEFJIHR3by<wbr>BkYXlzIGhhY2thdGhvbi4gSXQgaXMg<wbr>YSBwcm9vZiBvZiBjb25jZXB0IGFuZC<wbr>Bub3QgYSBmaW5hbCBwcm9kdWN0LiBE<wbr>byBub3Qgc2hhcmUgb3IgdXNlIHdpdG<wbr>hvdXQgcGVybWlzc2lvbiBmcm9tIHRo<wbr>ZSBhdXRob3IuDQoNCg0KYGBgDQoNCg<wbr>0KDQpgYGB7cn0NCg0KDQojSW5zdGFs<wbr>bCBsaWJyYXJpZXMNCiMgaW5zdGFsbC<wbr>5wYWNrYWdlcygiZHBseXIiKQ0KIyBp<wbr>bnN0YWxsLnBhY2thZ2VzKCJnZ3Bsb3<wbr>QyIikNCiMgaW5zdGFsbC5wYWNrYWdl<wbr>cygiRGF0YUV4cGxvcmVyIikNCiMgaW<wbr>5zdGFsbC5wYWNrYWdlcygnZmFpcm5l<wbr>c3MnKQ0KIyBpbnN0YWxsLnBhY2thZ2<wbr>VzKCJzdXJ2aXZhbCIpDQojIGluc3Rh<wbr>bGwucGFja2FnZXMoImdnZm9ydGlmeS<wbr>IpDQojIGluc3RhbGwucGFja2FnZXMo<wbr>ImgybyIpDQojIGluc3RhbGwucGFja2<wbr>FnZXMoInNxbGRmIikNCiMgaW5zdGFs<wbr>bC5wYWNrYWdlcygicmVzaGFwZSIpDQ<wbr>ogIA0KDQoNCiNMb2FkIGxpYnJhcmll<wbr>cw0KbGlicmFyeShkcGx5cikNCmxpYn<wbr>JhcnkoZ2dwbG90MikNCmxpYnJhcnko<wbr>RGF0YUV4cGxvcmVyKQ0KbGlicmFyeS<wbr>hmYWlybmVzcykNCmxpYnJhcnkoc3Vy<wbr>dml2YWwpDQpsaWJyYXJ5KGdnZm9ydG<wbr>lmeSkNCmxpYnJhcnkoaDJvKQ0KbGli<wbr>cmFyeShzcWxkZikNCmxpYnJhcnkocm<wbr>VzaGFwZSkNCg0KDQoNCnByb2plY3Rf<wbr>cGF0aCA8LSAiQzovVXNlcnMvSm9uYX<wbr>MvRG9jdW1lbnRzL0dyYWRpYW50IEFJ<wbr>L0FJIEV0aGljcy9EYXRhc2V0c19jcm<wbr>ltZS9jb21wYXMtYW5hbHlzaXMiDQpg<wbr>YGANCg0KDQoNCmBgYHtyIC0tLS0tLS<wbr>0tLS0tLS0tLS0tLS0tLS0tLS0gU09N<wbr>RSBDVVNUT00gRlVOQ1RJT05TIChydW<wbr>4gYXMgaXMpLS0tLS0tLS0tLS0tLS0t<wbr>LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS<wbr>0tfQ0KDQojLS0tIFNvbWUgQ3VzdG9t<wbr>IEZ1bmN0aW9ucy0tLSANCg0KY3VzdG<wbr>9tLnN1bW1hcnkuY29udCA8LSBmdW5j<wbr>dGlvbihkYXRhRnJhbWUpew0KICANCi<wbr>Agbi5taXNzICAgICAgICA8LSB1bmxp<wbr>c3QobGFwcGx5KGRhdGFGcmFtZSwgZn<wbr>VuY3Rpb24oeCl7bGVuZ3RoKHdoaWNo<wbr>KGlzLm5hKHgpKSl9KSkNCiAgbi5ub2<wbr>4ubWlzcyAgICA8LSByZXAobnJvdyhk<wbr>YXRhRnJhbWUpLCBuY29sKGRhdGFGcm<wbr>FtZSkpIC0gbi5taXNzDQogIHBlcmMu<wbr>bWlzcyA8LSAobi5taXNzL3JlcChucm<wbr>93KGRhdGFGcmFtZSksIG5jb2woZGF0<wbr>YUZyYW1lKSkpKjEwMA0KICB1bmlxdW<wbr>UudmFsdWVzIDwtIHVubGlzdChsYXBw<wbr>bHkoZGF0YUZyYW1lLCBmdW5jdGlvbi<wbr>h4KXtyZXR1cm4obGVuZ3RoKHVuaXF1<wbr>ZSh4KSkpfSkpDQogIG4ubWF4ICAgIC<wbr>AgICAgPC0gdW5saXN0KGxhcHBseShk<wbr>YXRhRnJhbWUsIG1heCwgbmEucm0gPS<wbr>BUUlVFKSkNCiAgbi5taW4gICAgICAg<wbr>ICA8LSB1bmxpc3QobGFwcGx5KGRhdG<wbr>FGcmFtZSwgbWluLCBuYS5ybSA9IFRS<wbr>VUUpKQ0KICBuLm1lYW4gICAgICAgID<wbr>wtIHVubGlzdChsYXBwbHkoZGF0YUZy<wbr>YW1lLCBtZWFuLCBuYS5ybSA9IFRSVU<wbr>UpKQ0KICBuLm1lZGlhbiAgICAgIDwt<wbr>IHVubGlzdChsYXBwbHkoZGF0YUZyYW<wbr>1lLCBtZWRpYW4sIG5hLnJtID0gVFJV<wbr>RSkpDQogIG4uSVFSICAgICAgICAgPC<wbr>0gdW5saXN0KGxhcHBseShkYXRhRnJh<wbr>bWUsIElRUiwgbmEucm0gPSBUUlVFKS<wbr>kNCiAgbi5zZCAgICAgICAgICA8LSB1<wbr>bmxpc3QobGFwcGx5KGRhdGFGcmFtZS<wbr>wgc2QsIG5hLnJtID0gVFJVRSkpDQog<wbr>IGRmLnF1YW50aWxlICAgPC0gZG8uY2<wbr>FsbChyYmluZCwgbGFwcGx5KGRhdGFG<wbr>cmFtZSwgcXVhbnRpbGUsIHByb2JzPX<wbr>NlcSgwLDEsMC4xKSwgbmEucm09VFJV<wbr>RSkpDQogIA0KICBjb2xuYW1lcyhkZi<wbr>5xdWFudGlsZSkgPC0gcGFzdGUoIlAi<wbr>LCBjb2xuYW1lcyhkZi5xdWFudGlsZS<wbr>ksIHNlcD0iXyIpDQogIGRmLnJlc3Vs<wbr>dCAgICAgICAgICAgICA8LSBjYmluZC<wbr>huLm5vbi5taXNzLCBuLm1pc3MsIHBl<wbr>cmMubWlzcywgdW5pcXVlLnZhbHVlcy<wbr>wgbi5tYXgsIG4ubWluLCBuLm1lYW4s<wbr>IG4ubWVkaWFuLCBuLklRUiwgbi5zZC<wbr>wgZGYucXVhbnRpbGUpDQogIGNvbG5h<wbr>bWVzKGRmLnJlc3VsdCkgICA8LSBjKC<wbr>JOIiwgIm5iX29mX01pc3MiLCAicGN0<wbr>X29mX01pc3NpbmciLCJVbmlxdWVfVm<wbr>FsdWVzIiwiTWF4IiwgIk1pbiIsICJN<wbr>ZWFuIiwgIk1lZGlhbiIsICJJUVIiLC<wbr>JTRCIgLGNvbG5hbWVzKGRmLnF1YW50<wbr>aWxlKSkNCiAgDQogIHJldHVybihkZi<wbr>5yZXN1bHQpDQp9DQoNCmN1c3RvbS5z<wbr>dW1tYXJ5LmNhdCA8LSBmdW5jdGlvbi<wbr>hkYXRhRnJhbWUpew0KICANCiAgbi5t<wbr>aXNzICAgICAgICA8LSB1bmxpc3QobG<wbr>FwcGx5KGRhdGFGcmFtZSwgZnVuY3Rp<wbr>b24oeCl7bGVuZ3RoKHdoaWNoKHg9PS<wbr>cnKSl9KSkNCiAgbi5ub24ubWlzcyAg<wbr>ICA8LSByZXAobnJvdyhkYXRhRnJhbW<wbr>UpLCBuY29sKGRhdGFGcmFtZSkpIC0g<wbr>bi5taXNzDQogIHBlcmMubWlzcyA8LS<wbr>Aobi5taXNzL3JlcChucm93KGRhdGFG<wbr>cmFtZSksIG5jb2woZGF0YUZyYW1lKS<wbr>kpKjEwMA0KICB1bmlxdWUudmFsdWVz<wbr>IDwtIHVubGlzdChsYXBwbHkoZGF0YU<wbr>ZyYW1lLCBmdW5jdGlvbih4KXtyZXR1<wbr>cm4obGVuZ3RoKHVuaXF1ZSh4KSkpfS<wbr>kpDQogIA0KICBkZi5yZXN1bHQgPC0g<wbr>Y2JpbmQobi5ub24ubWlzcywgbi5taX<wbr>NzLCBwZXJjLm1pc3MsIHVuaXF1ZS52<wbr>YWx1ZXMpDQogIGNvbG5hbWVzKGRmLn<wbr>Jlc3VsdCkgPC0gYygiTiIsICIjIG9m<wbr>IE1pc3MiLCAiJSBvZiBNaXNzaW5nIi<wbr>wgIlVuaXF1ZSIpDQogIHJldHVybihk<wbr>Zi5yZXN1bHQpDQogIA0KfQ0KYGBgDQ<wbr>oNCg0KDQpgYGB7cn0NCiMjbG9hZCB0<wbr>aGUgZGF0YXNldA0KDQpkYXRhc2V0PC<wbr>0gcmVhZC5jc3YoIn4vR3JhZGlhbnQg<wbr>QUkvQUkgRXRoaWNzL0RhdGFzZXRzX2<wbr>NyaW1lL2NvbXBhcy1hbmFseXNpcy9j<wbr>b21wYXMtc2NvcmVzLXR3by15ZWFycy<wbr>5jc3YiKQ0KDQojLS0tIENvbnZlcnQg<wbr>aW50ZWdlciBhbmQgaW50ZWdlcjY0IH<wbr>ZhcmlhYmxlcyB0byBudW1lcmljIHR5<wbr>cGUgLS0tDQpkYXRhc2V0W3NhcHBseS<wbr>hkYXRhc2V0LCBjbGFzcykgJWluJSBj<wbr>KCJpbnRlZ2VyIiwiaW50ZWdlcjY0Ii<wbr>ldIDwtIGxhcHBseShkYXRhc2V0W3Nh<wbr>cHBseShkYXRhc2V0LCBjbGFzcykgJW<wbr>luJSBjKCJpbnRlZ2VyIiwiaW50ZWdl<wbr>cjY0IildLCBhcy5udW1lcmljKQkNCg<wbr>0KIy0tLSBUcmFuc2Zvcm0gY2hhcmFj<wbr>dGVyIHRvIGZhY3RvciAtLS0NCmRmLm<wbr>RhdGE9YXMuZGF0YS5mcmFtZSh1bmNs<wbr>YXNzKGRhdGFzZXQpKQ0KDQoNCmBgYA<wbr>0KDQoNCg0KYGBge3IgLS0tLS0tLS0t<wbr>LS0tLS0tLS1FWFBMT1JFIERBVEFTRV<wbr>QgKHJ1biBhcyBpcywgb3B0aW9uYWwg<wbr>ZXhwbG9yYXRpb24gb2YgZmVhdHVyZX<wbr>MgZGlzdHJpYnV0aW9ucyktLS0tLS0t<wbr>LS0tLS0tLS19DQoNCg0KDQojLS0tIE<wbr>V4dHJhY3RpbmcgdGhlIGRlZmF1bHQg<wbr>Y2xhc3Mgb2YgYWxsIHRoZSB2YXJpYW<wbr>JsZXMgLS0tIA0KDQp2YXIubmFtZXMu<wbr>Y2xhc3MgICAgIDwtIHVubGlzdChsYX<wbr>BwbHkoZGYuZGF0YSwgY2xhc3MpKQ0K<wbr>ZGYudmFyLm5hbWVzLmNsYXNzICA8LS<wbr>BjYmluZC5kYXRhLmZyYW1lKG5hbWVz<wbr>KHZhci5uYW1lcy5jbGFzcyksIHZhci<wbr>5uYW1lcy5jbGFzcykNCg0KY29sbmFt<wbr>ZXMoZGYudmFyLm5hbWVzLmNsYXNzKS<wbr>A8LSBjKCJuYW1lcyIsICJjbGFzcyIp<wbr>DQpyb3duYW1lcyhkZi52YXIubmFtZX<wbr>MuY2xhc3MpIDwtIE5VTEwNCg0KIy0t<wbr>LSBFeHRyYWN0aW5nIHVuaXF1ZSBsZX<wbr>ZlbHMgZm9yIGVhY2ggdmFyaWFibGUg<wbr>LS0tDQoNCnVuaXF1ZS52YWx1ZXMgIC<wbr>AgICAgICA8LSB1bmxpc3QobGFwcGx5<wbr>KGRmLmRhdGEsIGZ1bmN0aW9uKHgpe3<wbr>JldHVybihsZW5ndGgodW5pcXVlKHgp<wbr>KSl9KSkNCmRmLnZhci51bmlxdWUudm<wbr>FsdWVzICA8LSBjYmluZC5kYXRhLmZy<wbr>YW1lKG5hbWVzKHVuaXF1ZS52YWx1ZX<wbr>MpLCB1bmlxdWUudmFsdWVzKQ0KDQpj<wbr>b2xuYW1lcyhkZi52YXIudW5pcXVlLn<wbr>ZhbHVlcykgPC0gYygibmFtZXMiLCAi<wbr>dW5pcXVlX3ZhbHVlcyIpDQpyb3duYW<wbr>1lcyhkZi52YXIudW5pcXVlLnZhbHVl<wbr>cykgPC0gTlVMTA0KDQoNCiMtLS0gU3<wbr>VtbWFyeSBzdGF0aXN0aWNzIC0tLQ0K<wbr>DQppbmRleC5udW1lcmljIDwtIHdoaW<wbr>NoKHZhci5uYW1lcy5jbGFzcyAlaW4l<wbr>IGMoJ251bWVyaWMnLCdpbnRlZ2VyJy<wbr>wnbnVtJykpDQppbmRleC5mYWN0b3Ig<wbr>PC0gd2hpY2godmFyLm5hbWVzLmNsYX<wbr>NzICVpbiUgYygnZmFjdG9yJykpDQoN<wbr>Cm51bWVyaWMudmFycyA8LSBjb2xuYW<wbr>1lcyhkZi5kYXRhWyxpbmRleC5udW1l<wbr>cmljXSkNCmZhY3Rvci52YXJzIDwtIG<wbr>NvbG5hbWVzKGRmLmRhdGFbLGluZGV4<wbr>LmZhY3Rvcl0pDQoNCg0Kc3RhdHMuY2<wbr>9udC52YXJzIDwtIGFzLmRhdGEuZnJh<wbr>bWUoY3VzdG9tLnN1bW1hcnkuY29udC<wbr>hkZi5kYXRhWyxpbmRleC5udW1lcmlj<wbr>XSkpDQpzdGF0cy5jYXQudmFycyAgPC<wbr>0gYXMuZGF0YS5mcmFtZShjdXN0b20u<wbr>c3VtbWFyeS5jYXQoZGYuZGF0YVssaW<wbr>5kZXguZmFjdG9yXSkpDQoNCndyaXRl<wbr>LmNzdihzdGF0cy5jb250LnZhcnMsIH<wbr>Bhc3RlMChwcm9qZWN0X3BhdGgsIi9S<wbr>X09VVFBVVC9Db250aW51b3VzX1Zhcm<wbr>lhYmxlc19TdW1tYXJ5LmNzdiIpKQ0K<wbr>d3JpdGUuY3N2KHN0YXRzLmNhdC52YX<wbr>JzLCBwYXN0ZTAocHJvamVjdF9wYXRo<wbr>LCIvUl9PVVRQVVQvQ2F0ZWdvcmljYW<wbr>xfVmFyaWFibGVzX1N1bW1hcnkuY3N2<wbr>IikpDQoNCndyaXRlLmNzdihkZi52YX<wbr>IubmFtZXMuY2xhc3MscGFzdGUwKHBy<wbr>b2plY3RfcGF0aCwiL1JfT1VUUFVUL2<wbr>RmX3Zhcl9uYW1lc19jbGFzcy5jc3Yi<wbr>KSkNCg0KDQojSWRlbnRpZnkgdmFyaW<wbr>FibGVzIHdpdGggMTAwJSBtaXNzaW5n<wbr>IGRhdGENCnZhci5vbmx5Lm1pc3MgPC<wbr>0gcm93Lm5hbWVzKHN0YXRzLmNvbnQu<wbr>dmFyc1t3aGljaChzdGF0cy5jb250Ln<wbr>ZhcnMkcGN0X29mX01pc3NpbmcgPT0g<wbr>MTAwKSxdKQ0KDQoNCiMjIy0tLS1IaW<wbr>doIGxldmVsIGF1dG9tYXRlZCBncmFw<wbr>aGlxdWVzLS0tIyMjDQoNCnNxbGRmKC<wbr>JzZWxlY3QgcmFjZSwgc3VtKHR3b195<wbr>ZWFyX3JlY2lkKSoxLjAwL2NvdW50KC<wbr>opIGZyb20gJ2RmLmRhdGEnIGdyb3Vw<wbr>IGJ5IDEgb3JkZXIgYnkgMSIpDQoNCn<wbr>Bsb3RfbWlzc2luZyhkZi5kYXRhKQ0K<wbr>cGxvdF9iYXIoZGYuZGF0YSkNCnBsb3<wbr>RfaGlzdG9ncmFtKGRmLmRhdGEpDQpw<wbr>bG90X3FxKGRmLmRhdGEsIHNhbXBsZW<wbr>Rfcm93cyA9IDEwMDBMKQ0KcXFfZGF0<wbr>YT0gZGYuZGF0YVssYygiZGVjaWxlX3<wbr>Njb3JlIiwiZGVjaWxlX3Njb3JlLjEi<wbr>LCJzY29yZV90ZXh0IiwgInR3b195ZW<wbr>FyX3JlY2lkIiwic2V4IiwiYWdlIiAs<wbr>ImFnZV9jYXQiLCJyYWNlIiwgImp1dl<wbr>9mZWxfY291bnQiLCJqdXZfbWlzZF9j<wbr>b3VudCIsImp1dl9vdGhlcl9jb3VudC<wbr>IsInByaW9yc19jb3VudCIsImNfY2hh<wbr>cmdlX2RlZ3JlZSIsImNfY2hhcmdlX2<wbr>Rlc2MiLCJwcmlvcnNfY291bnQuMSIp<wbr>XQ0KcGxvdF9xcShxcV9kYXRhLCBieS<wbr>A9ICJyYWNlIiwgc2FtcGxlZF9yb3dz<wbr>ID0gNTAwMEwpDQoNCg0KcGxvdF9jb3<wbr>JyZWxhdGlvbihxcV9kYXRhLCBtYXhj<wbr>YXQgPSA3TCkNCg0KIyBXZSBjYW4gc2<wbr>VlIHRoYXQgQWZyaWNhbiBBbWVyaWNh<wbr>biBwb3B1bGF0aW9uIGlzIHlvdW5nZX<wbr>IgYW5kIGNvbW1pdHRlZCBtb3JlIGp1<wbr>dmVuaWxlIGNyaW1lIGluIGF2ZXJhZ2<wbr>UgKGxpbmsgdG8gc29jaW8tZGVtbz8/<wbr>KS4gSW4gYWRkaXRpb24gLCBBZnJpY2<wbr>FuIEFtZXJpY2FuIHRlbmQgdG8gaGF2<wbr>ZSBhIGhpZ2hlciBjb3JyZWxhdGlvbi<wbr>B3aXRoIGNoYXJnZSBkZWdyZWUgKEYp<wbr>IHdoaWxlIGNhdWNhc2lhbiBoYXZlIG<wbr>EgaGlnaGVyIGNvcnJlbGF0aW9uIHdp<wbr>dGggY2hhcmdlIGRlZ3JlZSAoTSkuIF<wbr>dlIGRpZCBub3QgbG9vayBpZiB0aGUg<wbr>ZGlmZmVyZW5jZSBpcyBzaWduaWZpY2<wbr>FudCBhdCB0aGlzIHN0YWdlLCB0aG9z<wbr>ZSBhcmUganVzdCBwZXJzb25hbCBub3<wbr>Rlcy4NCg0KYGBgDQoNCk5PVEVTOg0K<wbr>DQpXZSBjYW4gc2VlIHRoYXQgdGhlIG<wbr>RhdGFzZXQgaXMgbm90IGJhbGFuY2Vk<wbr>IGJldHdlZW4gIlNleCIgYW5kICJSYW<wbr>NlLiBUaGlzIGNvdWxkLCBhbmQgd2ls<wbr>bCwgbGVhZCB0byBzb21lIGJpYXMgaW<wbr>4gdGVybXMgb2YgdGhlIG1vZGVsIGFi<wbr>aWxpdHkgdG8gcGVyZm9ybSBmb3IgdG<wbr>hlIG1pbm9yaXR5IHBvcHVsYXRpb25z<wbr>Lg0KDQpXZSBjYW4gYWxzbyBzZWUgdG<wbr>hhdCB0aGUgImFjdHVhbCIgcmVvZmZl<wbr>bnNlIHJhdGUgaXMgZGlmZmVyZW50IH<wbr>dpdGhpbiB0aGUgInJhY2UiIGFuZCAi<wbr>U2V4Ii4gVGhlIGRpZmZlcmVuY2Ugb2<wbr>YgcmVvZmZlbnNlIHJhdGUgaXMgbm90<wbr>IHRoZSBzY29wZSBvZiB0aGlzIGV4ZX<wbr>JjaXNlIGFzIHdlIHdvdWxkIHJlcXVp<wbr>cmUgbXVjaCBtb3JlIGRhdGEgdG8gY2<wbr>9udHJvbCBmb3IgYWJzZW50IGZhY3Rv<wbr>cnMgdGhhdCBpbmZsdWVuY2UgY3JpbW<wbr>Ugc3VjaCBhcyBzb2Npby1lY29ub21p<wbr>YyB2YXJpYWJsZXMuIFdlIGFsc28gaG<wbr>F2ZSB0byBtZW50aW9uIHRoYXQgdGhl<wbr>IGRpZmZlcmVuY2Ugb2YgcmVvZmZlbn<wbr>NlIHJhdGUgYmV0d2VlbiB0aGUgcmFj<wbr>ZXMgbWlnaHQgYWxzbyBiZSBkdWUgdG<wbr>8gdGhlIHZpY2lvdXMgY2lyY2xlIG9m<wbr>IGJpYXNlZCBwcmVkaWN0aXZlIHBvbG<wbr>ljaW5nIGFsZ29yaXRobS4gT25lIGNv<wbr>dWxkIHZhbGlkYXRlIG91ciBhc3N1bX<wbr>B0aW9uIGJ5IGxvb2tpbmcgYXQgdGhl<wbr>IGNyaW1lIHJhdGUgc3RhbmRhcmRpem<wbr>VkIGJ5IHRoZSB0aW1lIHNwZW5kIG9u<wbr>IGNlcnRhaW4gbmVpZ2hib3Job29kIG<wbr>hhdmluZyBhIG1ham9yaXR5IG9mIEFm<wbr>cmljYW4gQW1lcmljYW5zIG9yIENhdW<wbr>Nhc2lhbiBwZW9wbGUuIA0KDQpUaGlz<wbr>IGNvZGUgd2lsbCBub3QgYWRkcmVzcy<wbr>B0aGUgdW5kZXJseWluZyBiaWFzIGlu<wbr>IHRoZSBkYXRhIGJ1dCB0aGUgYmlhcy<wbr>BtYWRlIGJ5IHRoZSBDT01QQVMgYWxn<wbr>b3JpdGhtLiANCg0KSW4gdGhpcyBjb2<wbr>RlLCB3ZSB3aWxsOg0KMSkgU2hvdyBo<wbr>b3cgdGhlIENPTVBBUyBBbGdvcml0aG<wbr>0gdGVuZCB0byBiZSBtb3JlIGNvbnNl<wbr>cnZhdGl2ZSB3aXRoIEFmcmljYW4gQW<wbr>1lcmljYW5zIChtZWFuaW5nIHRoYXQg<wbr>aXQgd2lsbCB0ZW5kIHRvIG92ZXJseS<wbr>BzY29yZSBBZnJpY2FuIEFtZXJpY2Fu<wbr>cyB3aXRoIGFuIEhpZ2ggcmlzayBjb2<wbr>1wYXJlZCB0byBDYXVjYXNpYW5zKQ0K<wbr>MikgUHJvcG9zZSBhIGNvcnJlY3Rpb2<wbr>4gb2YgdGhlIGFsZ29yaXRobSB0byBl<wbr>bnN1cmUgdGhhdCB0aGUgc28gY2FsbG<wbr>VkICJyYWNlIiBhcmUgZXF1YWwgaW4g<wbr>dGVybXMgb2YgdGhlIG1pc3Rha2VzIG<wbr>1hZGUgYnkgdGhlIGFsZ29yaXRobQ0K<wbr>MykgU2hvdyB0aGUgZGlmZmVyZW5jZS<wbr>BpbiBzY29yZSAuLiANCg0KDQpMaW1p<wbr>dGF0aW9uczoNClZpb2xlbnQgY3JpbW<wbr>VzIGFyZSBub3QgYW5hbHlzZWQgc3Bl<wbr>Y2lmaWNhbGx5IGR1ZSB0byB0aW1lIG<wbr>NvbnN0cmFpbnRzDQpCaWFzIGFnYWlu<wbr>c3Qgc2V4IHdvbid0IGJlIGFuYWx5c2<wbr>UgYXMgd2VsbCBkdWUgdG8gdGltZSBj<wbr>b25zdHJhaW50cw0KDQoNCmBgYHtyIE<wbr>hvdXNla2VlcGluZ30NCg0KIy0tLSBE<wbr>ZWZpbmUgeW91ciB0YXJnZXQgdmFyaW<wbr>FibGUgbmFtZSBbTWFuZGF0b3J5IGlu<wbr>cHV0XSAtLS0NCg0KdHJndF92YXI9In<wbr>R3b195ZWFyX3JlY2lkIg0KDQojLS0t<wbr>IERlZmluZSBjb2x1bW5zIHRvIGV4Y2<wbr>x1ZGUgZnJvbSBleHBsYW5hdG9yeSB2<wbr>YXJpYWJsZXMgQlVUIGxpbmsgYmFjay<wbr>B0byBwcmVkaWN0aW9ucyBhZnRlcndh<wbr>cmRzIC0tLQ0KICAgIA0KICAgIHRyZ3<wbr>Quc2hvcnQgPC0gYygnaWQnLA0KICAg<wbr>ICAgICAgICAgICAgICAgICAnZGVjaW<wbr>xlX3Njb3JlJywNCiAgICAgICAgICAg<wbr>ICAgICAgICAnZGVjaWxlX3Njb3JlLj<wbr>EnLA0KICAgICAgICAgICAgICAgICAg<wbr>ICAnc2NvcmVfdGV4dCcsDQogICAgIC<wbr>AgICAgICAgICAgICAgICdzdGFydCcs<wbr>DQogICAgICAgICAgICAgICAgICAgIC<wbr>dlbmQnLA0KICAgICAgICAgICAgICAg<wbr>ICAgICAnZXZlbnQnLA0KICAgICAgIC<wbr>AgICAgICAgICAgICB0cmd0X3Zhcg0K<wbr>ICAgICAgICAgICAgICAgICAgICApDQ<wbr>oNCiMtLS0gRGVmaW5lIGNvbHVtbnMg<wbr>dG8gZXhjbHVkZSBmcm9tIGV4cGxhbm<wbr>F0b3J5IHZhcmlhYmxlcyAtLS0NCg0K<wbr>ICAgIHRyZ3QubG9uZyA8LSBjKHRyZ3<wbr>Quc2hvcnQsDQogICAgICAgICAgICAg<wbr>ICAgICAgICduYW1lJywNCiAgICAgIC<wbr>AgICAgICAgICAgICAgJ2ZpcnN0JywN<wbr>CiAgICAgICAgICAgICAgICAgICAgJ2<wbr>xhc3QnLA0KICAgICAgICAgICAgICAg<wbr>ICAgICAnZG9iJywNCiAgICAgICAgIC<wbr>AgICAgICAgICAgJ2RheXNfYl9zY3Jl<wbr>ZW5pbmdfYXJyZXN0JywNCiAgICAgIC<wbr>AgICAgICAgICAgICAgJ2NfamFpbF9p<wbr>bicsDQogICAgICAgICAgICAgICAgIC<wbr>AgICdjX2phaWxfb3V0JywNCiAgICAg<wbr>ICAgICAgICAgICAgICAgJ2NfY2FzZV<wbr>9udW1iZXInLA0KICAgICAgICAgICAg<wbr>ICAgICAgICAnY19kYXlzX2Zyb21fY2<wbr>9tcGFzJywNCiAgICAgICAgICAgICAg<wbr>ICAgICAgJ3JfY2FzZV9udW1iZXInLA<wbr>0KICAgICAgICAgICAgICAgICAgICAn<wbr>cl9jaGFyZ2VfZGVncmVlJywNCiAgIC<wbr>AgICAgICAgICAgICAgICAgJ3JfZGF5<wbr>c19mcm9tX2FycmVzdCcsDQogICAgIC<wbr>AgICAgICAgICAgICAgICdyX29mZmVu<wbr>c2VfZGF0ZScsDQogICAgICAgICAgIC<wbr>AgICAgICAgICdyX2NoYXJnZV9kZXNj<wbr>JywNCiAgICAgICAgICAgICAgICAgIC<wbr>AgJ3JfamFpbF9pbicsDQogICAgICAg<wbr>ICAgICAgICAgICAgICdyX2phaWxfb3<wbr>V0JywNCiAgICAgICAgICAgICAgICAg<wbr>ICAgJ3Zpb2xlbnRfcmVjaWQnLA0KIC<wbr>AgICAgICAgICAgICAgICAgICAnaXNf<wbr>dmlvbGVudF9yZWNpZCcsDQogICAgIC<wbr>AgICAgICAgICAgICAgICd2cl9jYXNl<wbr>X251bWJlcicsDQogICAgICAgICAgIC<wbr>AgICAgICAgICd2cl9jaGFyZ2VfZGVn<wbr>cmVlJywNCiAgICAgICAgICAgICAgIC<wbr>AgICAgJ3ZyX29mZmVuc2VfZGF0ZScs<wbr>DQogICAgICAgICAgICAgICAgICAgIC<wbr>d2cl9jaGFyZ2VfZGVzYycsDQogICAg<wbr>ICAgICAgICAgICAgICAgICd0eXBlX2<wbr>9mX2Fzc2Vzc21lbnQnLA0KICAgICAg<wbr>ICAgICAgICAgICAgICAnc2NyZWVuaW<wbr>5nX2RhdGUnLA0KICAgICAgICAgICAg<wbr>ICAgICAgICAndl90eXBlX29mX2Fzc2<wbr>Vzc21lbnQnLA0KICAgICAgICAgICAg<wbr>ICAgICAgICAndl9kZWNpbGVfc2Nvcm<wbr>UnLA0KICAgICAgICAgICAgICAgICAg<wbr>ICAndl9zY29yZV90ZXh0JywNCiAgIC<wbr>AgICAgICAgICAgICAgICAgJ3Zfc2Ny<wbr>ZWVuaW5nX2RhdGUnLA0KICAgICAgIC<wbr>AgICAgICAgICAgICAnaW5fY3VzdG9k<wbr>eScsDQogICAgICAgICAgICAgICAgIC<wbr>AgICdvdXRfY3VzdG9keScsDQogICAg<wbr>ICAgICAgICAgICAgICAgJ2lzX3JlY2<wbr>lkJywNCiAgICAgICAgICAgICAgICAg<wbr>ICAnY29tcGFzX3NjcmVlbmluZ19kYX<wbr>RlJywNCiAgICAgICAgICAgICAgICAg<wbr>ICAnY19vZmZlbnNlX2RhdGUnLA0KIC<wbr>AgICAgICAgICAgICAgICAgICdjX2Fy<wbr>cmVzdF9kYXRlJw0KICAgICAgICAgIC<wbr>AgICAgICAgIA0KICAgICAgICAgICAg<wbr>ICAgICAgICAgICkNCiAgDQogICMtLS<wbr>0gc2V0dXAgaW5kZXggZm9yIHRhcmdl<wbr>dCB2YXJpYWJsZXMtLS0NCg0KaW5kZX<wbr>gudHJndC5zaG9ydCA8LSB3aGljaChj<wbr>b2xuYW1lcyhkZi5kYXRhKSAlaW4lIH<wbr>RyZ3Quc2hvcnQgKSAgICANCmluZGV4<wbr>LnRyZ3QubG9uZyA8LSB3aGljaChjb2<wbr>xuYW1lcyhkZi5kYXRhKSAlaW4lIHRy<wbr>Z3QubG9uZyApIA0KDQojIyMgZmFjdG<wbr>9yIHRoYXQgc2hvdWxkIGJlIGRhdGVz<wbr>DQojICdjb21wYXNfc2NyZWVuaW5nX2<wbr>RhdGUnLA0KIyAnY19qYWlsX2luJywN<wbr>CiMgJ2NfamFpbF9vdXQnLA0KIyAnY1<wbr>9vZmZlbnNlX2RhdGUnLA0KIyAnY19h<wbr>cnJlc3RfZGF0ZScsDQojICdzY3JlZW<wbr>5pbmdfZGF0ZScsDQojICdpbl9jdXN0<wbr>b2R5JywNCiMgJ291dF9jdXN0b2R5Jy<wbr>wNCg0KDQpkZi5kYXRhLmZlPC0gY2Jp<wbr>bmQoZGYuZGF0YVsgLGluZGV4LnRyZ3<wbr>Quc2hvcnRdLGRmLmRhdGFbLC1pbmRl<wbr>eC50cmd0LmxvbmddKQ0KY29sbmFtZX<wbr>MoZGYuZGF0YS5mZSkNCg0KDQpgYGAN<wbr>Cg0KDQoNCg0KDQpgYGB7ciAxKSBDb2<wbr>1wdXRlIFBlcmZvcm1hbmNlIG1ldHJp<wbr>Y3Mgb2YgQ09NUEFTIEFsZ29yaXRobS<wbr>BieSByYWNlIH0NCg0Kc3FsZGYoInNl<wbr>bGVjdCBkaXN0aW5jdCBzY29yZV90ZX<wbr>h0LCBkZWNpbGVfc2NvcmUgZnJvbSAn<wbr>ZGYuZGF0YS5mZScgb3JkZXIgYnkgMi<wbr>AiKQ0KIyBOb3RlOiBXZSB3aWxsIGFz<wbr>c3VtZSB0aGUgbWVtYmVyIHdobyBzY2<wbr>9yZXMgbWVkaXVtIGFuZCBIaWdoIGFy<wbr>ZSBwcmVkaWN0ZWQgYXMgcmVjaWRpdj<wbr>0xDQoNCg0KIy0tLSBBcHBseSBkZXNp<wbr>cmVkIHRocmVzaG9sZCAtLS0NCiMgUH<wbr>JveHkgb2YgZGVjaXNpb24gZm9yIENP<wbr>TVBBUyBzY29yZQ0KICAgIGRmLmRhdG<wbr>EuZmUkcHJlZF9jb21wYXM9aWZlbHNl<wbr>KGRmLmRhdGEuZmUkZGVjaWxlX3Njb3<wbr>JlID49IDUgLCAxLCAwKSANCiMgUHJv<wbr>eHkgb2YgInByb2JhYmlsaXR5IiB0by<wbr>BleHBsb3JlIHRoZSBpbXBhY3Qgb2Yg<wbr>ZGlmZmVyZW50IGN1dG9mZiB0aHJlc2<wbr>hvbGRzIG9uIHRoZSBlcnJvcnMvcGVy<wbr>Zm9ybWFuY2UNCiAgICBkZi5kYXRhLm<wbr>ZlJGRlY2lsZV9zY29yZV9wY3Q9ZGYu<wbr>ZGF0YS5mZSRkZWNpbGVfc2NvcmUvMT<wbr>ANCiAgICANCiAgICANCiAgICANCiMt<wbr>LS0gQnVpbGQgcHJlZGljdGlvbiBkYX<wbr>Rhc2V0DQogICAgYT1hcy5kYXRhLmZy<wbr>YW1lKGRmLmRhdGEuZmUkaWQpICNsaW<wbr>5rIGJhY2sgdG8gbWVtYmVyIGlkDQog<wbr>ICAgZXZhbChwYXJzZSh0ZXh0PXBhc3<wbr>RlMCgiYj1hcy5kYXRhLmZyYW1lKGRm<wbr>LmRhdGEuZmUkIix0cmd0X3ZhciwiKS<wbr>IpKSkgI2xpbmsgYmFjayB0byB0YXJl<wbr>dCB2YXJpYWJsZQ0KICAgIGM9YXMuZG<wbr>F0YS5mcmFtZShkZi5kYXRhLmZlJGRl<wbr>Y2lsZV9zY29yZV9wY3QpICMgaW5jbH<wbr>VkZSBwcm9iYWJpbGl0eSANCiAgICBk<wbr>PWFzLmRhdGEuZnJhbWUoYXMubnVtZX<wbr>JpYyhkZi5kYXRhLmZlJHByZWRfY29t<wbr>cGFzKSkgIyBrZWVwIGF1dG9tYXRlZC<wbr>BwcmVkaWN0ZWQgdmFsdWUgYmFzZWQg<wbr>b24gaDJvIG9wdGltYWwgZjEvZjIgZn<wbr>VuY3Rpb25zDQogICAgZT1hcy5kYXRh<wbr>LmZyYW1lKGRmLmRhdGEuZmUkcmFjZS<wbr>kNCiAgICBmPWFzLmRhdGEuZnJhbWUo<wbr>ZGYuZGF0YS5mZSRzZXgpDQogICANCi<wbr>AgICBwcmVkX3RhYmxlPWFzLmRhdGEu<wbr>ZnJhbWUoY2JpbmQoYSxiLGMsZCxlLG<wbr>YpKQ0KICAgIHJtKGEsYixjLGQsZSxm<wbr>KQ0KICAgIA0KICAgICNSZW5hbWUgY2<wbr>9sdW1ucw0KICAgICAgY29sbmFtZXMo<wbr>cHJlZF90YWJsZSk9YygiaWQiLHBhc3<wbr>RlMCh0cmd0X3ZhciksImRlY2lsZV9z<wbr>Y29yZV9wY3QiLCJwcmVkX2NvbXBhcy<wbr>IsInJhY2UiLCJnZW5kZXIiKQ0KDQog<wbr>Iy0tIENvbXB1dGUgc29tZSBwZXJmb3<wbr>JtYW5jZSBtZXRyaWNzIChpbmNsdWRp<wbr>bmcgVFBSIGFuZCBGTlIpIGZvciBzZX<wbr>ZlcmFsIGN1dG9mZnMgLS0tDQogIA0K<wbr>ICAgICMjIEZ1bmN0aW9uICANCiAgIC<wbr>AgICAgIGZpbmRfdGhyZXNob2xkIDwt<wbr>IGZ1bmN0aW9uKHByZWRfdGFibGUsIG<wbr>Zyb209MC4wMCwgdG89MSwgYnk9MC4w<wbr>MSkgew0KICByZXN1bHQ9TlVMTA0KIC<wbr>AgIGZvciAodGhyZXNob2xkIGluIHNl<wbr>cShmcm9tPWZyb20sIHRvPXRvLCBieT<wbr>1ieSkpIHsNCiAgICAgdiA8LSByZXAo<wbr>TkEsIG5yb3cocHJlZF90YWJsZSkpDQ<wbr>ogICAgICB2IDwtIGlmZWxzZShwcmVk<wbr>X3RhYmxlJGRlY2lsZV9zY29yZV9wY3<wbr>QgPj0gdGhyZXNob2xkICYgcHJlZF90<wbr>YWJsZSR0d29feWVhcl9yZWNpZCA9PS<wbr>AxLCAiVFAiLCB2KQ0KICAgICAgdiA8<wbr>LSBpZmVsc2UocHJlZF90YWJsZSRkZW<wbr>NpbGVfc2NvcmVfcGN0ID49IHRocmVz<wbr>aG9sZCAmIHByZWRfdGFibGUkdHdvX3<wbr>llYXJfcmVjaWQgPT0gMCwgIkZQIiwg<wbr>dikNCiAgICAgIHYgPC0gaWZlbHNlKH<wbr>ByZWRfdGFibGUkZGVjaWxlX3Njb3Jl<wbr>X3BjdCA8IHRocmVzaG9sZCAmIHByZW<wbr>RfdGFibGUkdHdvX3llYXJfcmVjaWQg<wbr>PT0gMSwgIkZOIiwgdikNCiAgICAgIH<wbr>YgPC0gaWZlbHNlKHByZWRfdGFibGUk<wbr>ZGVjaWxlX3Njb3JlX3BjdCA8IHRocm<wbr>VzaG9sZCAmIHByZWRfdGFibGUkdHdv<wbr>X3llYXJfcmVjaWQgPT0gMCwgIlROIi<wbr>wgdikNCg0KICAgICAgZ2RfY2xfcmF0<wbr>ZT1yb3VuZChzdW0odiAlaW4lIGMoIl<wbr>RQIiwiVE4iKSkvbGVuZ3RoKHYpLGRp<wbr>Z2l0cz00KQ0KICAgICAgcHJlY2lzaW<wbr>9uPXJvdW5kKHN1bSh2ICVpbiUgYygi<wbr>VFAiKSkvc3VtKHYgJWluJSBjKCJUUC<wbr>IsIkZQIikpLGRpZ2l0cz00KQ0KICAg<wbr>ICAgdHJ1ZV9uZWdfcmF0ZT1yb3VuZC<wbr>hzdW0odiAlaW4lIGMoIlROIikpL3N1<wbr>bSh2ICVpbiUgYygiVE4iLCJGTiIpKS<wbr>xkaWdpdHM9NCkNCiAgICAgIHRfY2Fw<wbr>dHVyZWQ9cm91bmQoc3VtKHYgJWluJS<wbr>BjKCJUUCIpKS9zdW0odiAlaW4lIGMo<wbr>IlRQIiwiRk4iKSksZGlnaXRzPTQpDQ<wbr>ogICAgICBwY3RfY3RjdD1yb3VuZChz<wbr>dW0odiAlaW4lIGMoIlRQIiwiRlAiKS<wbr>kvbGVuZ3RoKHYpLGRpZ2l0cz00KQ0K<wbr>ICAgICAgRlBSPXJvdW5kKHN1bSh2IC<wbr>VpbiUgYygiRlAiKSkvc3VtKHYgJWlu<wbr>JSBjKCJUTiIsIkZQIikpLGRpZ2l0cz<wbr>00KQ0KICAgICAgRk5SPXJvdW5kKHN1<wbr>bSh2ICVpbiUgYygiRk4iKSkvc3VtKH<wbr>YgJWluJSBjKCJGTiIsIlRQIikpLGRp<wbr>Z2l0cz00KQ0KICAgICAgI2xpZnQ9cm<wbr>91bmQoKHByZWNpc2lvbi0oc3VtKHYg<wbr>JWluJSBjKCJUUCIsIkZOIikpL2xlbm<wbr>d0aCh2KSkpLyhzdW0odiAlaW4lIGMo<wbr>IlRQIiwiRk4iKSkvbGVuZ3RoKHYpKS<wbr>xkaWdpdHM9NCkNCiAgICAgIGxpZnQ9<wbr>dF9jYXB0dXJlZC9wY3RfY3RjdA0KIC<wbr>AgICAgDQogICAgICANCiAgICAgIHBl<wbr>cmYubWF0cml4PWRhdGEuZnJhbWUodG<wbr>hyZXNob2xkLGdkX2NsX3JhdGUsbGlm<wbr>dCxwcmVjaXNpb24sdHJ1ZV9uZWdfcm<wbr>F0ZSx0X2NhcHR1cmVkLHBjdF9jdGN0<wbr>LEZQUixGTlIpDQoNCiAgICAgIHJlc3<wbr>VsdD1yYmluZChyZXN1bHQscGVyZi5t<wbr>YXRyaXgpDQoNCiAgICB9DQogIHJldH<wbr>VybihyZXN1bHQpDQogICAgICAgICB9<wbr>DQogICAgDQogIA0KICAgIA0KICAjVX<wbr>NlIGZ1bmN0aW9uIGZvciBvdmVyYWxs<wbr>DQogICAgZmluZF90aHJlc2hvbGRfdG<wbr>FibGU9ZmluZF90aHJlc2hvbGQoIHBy<wbr>ZWRfdGFibGU9cHJlZF90YWJsZSkgDQ<wbr>ogICMgTG9vayBhdCBwZXJmb3JtYW5j<wbr>ZXMgcGVyIGdyb3VwICANCiAgICBmaW<wbr>5kX3RocmVzaG9sZF90YWJsZV9BZnJp<wbr>Y2FuX0FtZXJpY2FuPWZpbmRfdGhyZX<wbr>Nob2xkKCBwcmVkX3RhYmxlPXByZWRf<wbr>dGFibGVbcHJlZF90YWJsZSRyYWNlPT<wbr>0iQWZyaWNhbi1BbWVyaWNhbiIsXSkN<wbr>CiAgICBmaW5kX3RocmVzaG9sZF90YW<wbr>JsZV9DYXVjYXNpYW49ZmluZF90aHJl<wbr>c2hvbGQoIHByZWRfdGFibGU9cHJlZF<wbr>90YWJsZVtwcmVkX3RhYmxlJHJhY2U9<wbr>PSJDYXVjYXNpYW4iLF0pDQogICAgZm<wbr>luZF90aHJlc2hvbGRfdGFibGVfT3Ro<wbr>ZXI9ZmluZF90aHJlc2hvbGQoIHByZW<wbr>RfdGFibGU9cHJlZF90YWJsZVtwcmVk<wbr>X3RhYmxlJHJhY2U9PSJPdGhlciIsXS<wbr>kNCiAgICBmaW5kX3RocmVzaG9sZF90<wbr>YWJsZV9IaXNwYW5pYz1maW5kX3Rocm<wbr>VzaG9sZCggcHJlZF90YWJsZT1wcmVk<wbr>X3RhYmxlW3ByZWRfdGFibGUkcmFjZT<wbr>09Ikhpc3BhbmljIixdKQ0KICAgIGZp<wbr>bmRfdGhyZXNob2xkX3RhYmxlX05hdG<wbr>l2ZV9BbWVyaWNhbj1maW5kX3RocmVz<wbr>aG9sZCggcHJlZF90YWJsZT1wcmVkX3<wbr>RhYmxlW3ByZWRfdGFibGUkcmFjZT09<wbr>Ik5hdGl2ZSBBbWVyaWNhbiIsXSkNCi<wbr>AgICBmaW5kX3RocmVzaG9sZF90YWJs<wbr>ZV9Bc2lhbj1maW5kX3RocmVzaG9sZC<wbr>ggcHJlZF90YWJsZT1wcmVkX3RhYmxl<wbr>W3ByZWRfdGFibGUkcmFjZT09IkFzaW<wbr>FuIixdKQ0KIA0KDQogICAgI3NhdmUg<wbr>b3V0cHV0Og0KICAgICAgd3JpdGUuY3<wbr>N2KGZpbmRfdGhyZXNob2xkX3RhYmxl<wbr>X0FmcmljYW5fQW1lcmljYW4scGFzdG<wbr>UwKHByb2plY3RfcGF0aCwiL1JfT1VU<wbr>UFVUL2ZpbmRfdGhyZXNob2xkX3RhYm<wbr>xlX0FmcmljYW5fQW1lcmljYW4uY3N2<wbr>IikpOw0KICAgICAgd3JpdGUuY3N2KG<wbr>ZpbmRfdGhyZXNob2xkX3RhYmxlX0Nh<wbr>dWNhc2lhbixwYXN0ZTAocHJvamVjdF<wbr>9wYXRoLCIvUl9PVVRQVVQvZmluZF90<wbr>aHJlc2hvbGRfdGFibGVfQ2F1Y2FzaW<wbr>FuLmNzdiIpKTsNCiAgICAgIHdyaXRl<wbr>LmNzdihmaW5kX3RocmVzaG9sZF90YW<wbr>JsZV9PdGhlcixwYXN0ZTAocHJvamVj<wbr>dF9wYXRoLCIvUl9PVVRQVVQvZmluZF<wbr>90aHJlc2hvbGRfdGFibGVfT3RoZXIu<wbr>Y3N2IikpOw0KICAgICAgd3JpdGUuY3<wbr>N2KGZpbmRfdGhyZXNob2xkX3RhYmxl<wbr>X0hpc3BhbmljLHBhc3RlMChwcm9qZW<wbr>N0X3BhdGgsIi9SX09VVFBVVC9maW5k<wbr>X3RocmVzaG9sZF90YWJsZV9IaXNwYW<wbr>5pYy5jc3YiKSk7DQogICAgICB3cml0<wbr>ZS5jc3YoZmluZF90aHJlc2hvbGRfdG<wbr>FibGVfTmF0aXZlX0FtZXJpY2FuLHBh<wbr>c3RlMChwcm9qZWN0X3BhdGgsIi9SX0<wbr>9VVFBVVC9maW5kX3RocmVzaG9sZF90<wbr>YWJsZV9OYXRpdmVfQW1lcmljYW4uY3<wbr>N2IikpOw0KICAgICAgd3JpdGUuY3N2<wbr>KGZpbmRfdGhyZXNob2xkX3RhYmxlX0<wbr>FzaWFuLHBhc3RlMChwcm9qZWN0X3Bh<wbr>dGgsIi9SX09VVFBVVC9maW5kX3Rocm<wbr>VzaG9sZF90YWJsZV9Bc2lhbi5jc3Yi<wbr>KSk7DQogICAgDQogICAgI0FwcGx5IH<wbr>RoZSBzYW1lIHRocmVzaG9sZCB0byBh<wbr>bGwgZ3JvdXBzDQogICAgcGVyZl9vdm<wbr>VyYWxsPWFzLmRhdGEuZnJhbWUoY2Jp<wbr>bmQoJ092ZXJhbGwnLGZpbmRfdGhyZX<wbr>Nob2xkX3RhYmxlW2ZpbmRfdGhyZXNo<wbr>b2xkX3RhYmxlJHRocmVzaG9sZD09MC<wbr>41LF0pKQ0KICAgIHBlcmZfQWZyaWNh<wbr>bl9BbWVyaWNhbj1hcy5kYXRhLmZyYW<wbr>1lKGNiaW5kKCdBZnJpY2FuIEFtZXJp<wbr>Y2FuJyxmaW5kX3RocmVzaG9sZF90YW<wbr>JsZV9BZnJpY2FuX0FtZXJpY2FuW2Zp<wbr>bmRfdGhyZXNob2xkX3RhYmxlX0Fmcm<wbr>ljYW5fQW1lcmljYW4kdGhyZXNob2xk<wbr>PT0wLjUsXSkpDQogICAgcGVyZl9DYX<wbr>VjYXNpYW49YXMuZGF0YS5mcmFtZShj<wbr>YmluZCgnQ2F1Y2FzaWFuJyxmaW5kX3<wbr>RocmVzaG9sZF90YWJsZV9DYXVjYXNp<wbr>YW5bZmluZF90aHJlc2hvbGRfdGFibG<wbr>VfQ2F1Y2FzaWFuJHRocmVzaG9sZD09<wbr>MC41LF0pKQ0KICAgIHBlcmZfT3RoZX<wbr>I9YXMuZGF0YS5mcmFtZShjYmluZCgn<wbr>T3RoZXInLGZpbmRfdGhyZXNob2xkX3<wbr>RhYmxlX090aGVyW2ZpbmRfdGhyZXNo<wbr>b2xkX3RhYmxlX090aGVyJHRocmVzaG<wbr>9sZD09MC41LF0pKQ0KICAgIHBlcmZf<wbr>SGlzcGFuaWM9YXMuZGF0YS5mcmFtZS<wbr>hjYmluZCgnSGlzcGFuaWMnLGZpbmRf<wbr>dGhyZXNob2xkX3RhYmxlX0hpc3Bhbm<wbr>ljW2ZpbmRfdGhyZXNob2xkX3RhYmxl<wbr>X0hpc3BhbmljJHRocmVzaG9sZD09MC<wbr>41LF0pKQ0KICAgIHBlcmZfTmF0aXZl<wbr>X0FtZXJpY2FuPWFzLmRhdGEuZnJhbW<wbr>UoY2JpbmQoJ05hdGl2ZSBBbWVyaWNh<wbr>bicsZmluZF90aHJlc2hvbGRfdGFibG<wbr>VfTmF0aXZlX0FtZXJpY2FuW2ZpbmRf<wbr>dGhyZXNob2xkX3RhYmxlX05hdGl2ZV<wbr>9BbWVyaWNhbiR0aHJlc2hvbGQ9PTAu<wbr>NSxdKSkNCiAgICBwZXJmX0FzaWFuPW<wbr>FzLmRhdGEuZnJhbWUoY2JpbmQoJ0Fz<wbr>aWFuJyxmaW5kX3RocmVzaG9sZF90YW<wbr>JsZV9Bc2lhbltmaW5kX3RocmVzaG9s<wbr>ZF90YWJsZV9Bc2lhbiR0aHJlc2hvbG<wbr>Q9PTAuNSxdKSkNCiAgICANCiAgICAj<wbr>I3JlbmFtZSBjb2x1bW5zDQogICAgY2<wbr>9sbmFtZXMocGVyZl9vdmVyYWxsKVsx<wbr>XT1jKCJncm91cCIpDQogICAgY29sbm<wbr>FtZXMocGVyZl9BZnJpY2FuX0FtZXJp<wbr>Y2FuKVsxXT1jKCJncm91cCIpDQogIC<wbr>AgY29sbmFtZXMocGVyZl9DYXVjYXNp<wbr>YW4pWzFdPWMoImdyb3VwIikNCiAgIC<wbr>Bjb2xuYW1lcyhwZXJmX090aGVyKVsx<wbr>XT1jKCJncm91cCIpDQogICAgY29sbm<wbr>FtZXMocGVyZl9IaXNwYW5pYylbMV09<wbr>YygiZ3JvdXAiKQ0KICAgIGNvbG5hbW<wbr>VzKHBlcmZfTmF0aXZlX0FtZXJpY2Fu<wbr>KVsxXT1jKCJncm91cCIpDQogICAgY2<wbr>9sbmFtZXMocGVyZl9Bc2lhbilbMV09<wbr>YygiZ3JvdXAiKQ0KICAgIA0KICAgIA<wbr>0KICAgICNNZXJnZSBwZXJmb3JtYW5j<wbr>ZSBtZXRyaWNzIGZvciBnaXZlbiB0aH<wbr>Jlc2hvbGQNCiAgICBwZXJmX2FsbD1h<wbr>cy5kYXRhLmZyYW1lKHJiaW5kKHBlcm<wbr>Zfb3ZlcmFsbCxwZXJmX0FmcmljYW5f<wbr>QW1lcmljYW4scGVyZl9DYXVjYXNpYW<wbr>4scGVyZl9PdGhlcixwZXJmX0hpc3Bh<wbr>bmljLHBlcmZfTmF0aXZlX0FtZXJpY2<wbr>FuLHBlcmZfQXNpYW4pKQ0KICAgIGhl<wbr>YWQocGVyZl9hbGwpDQogICAgDQogIC<wbr>AgDQogICAgI0ZQUiA6IFdyb25nbHkg<wbr>YWNjdXNlZA0KICAgIA0KICAgICNGTl<wbr>I6IE1pc3NvdXQNCiAgICANCiAgDQog<wbr>ICAgcHJpbnQocGVyZl9hbGwpDQogIC<wbr>AgDQogICAgI1Jpc2sgb2Ygd3Jvbmds<wbr>eSBhc3NpZ25pbmcgbWVkL2hpZ2ggcm<wbr>lzayB0byBlYWNoIGdyb3VwDQogICAg<wbr>Z2dwbG90KHBlcmZfYWxsLGFlcyh4PW<wbr>dyb3VwLHk9RlBSKSkrZ2VvbV9iYXIo<wbr>c3RhdD0naWRlbnRpdHknKQ0KICAgIA<wbr>0KICAgICNSaXNrIG9mIHdyb25nbHkg<wbr>YXNzaWduaW5nIGEgbG93IHNjb3JlIC<wbr>ggbWlzc2luZyB0byBkZXRlY3Qgc29t<wbr>ZW9uZSB3aG8gd2lsbCByZS1vZmZlbm<wbr>NlKSANCiAgICBnZ3Bsb3QocGVyZl9h<wbr>bGwsYWVzKHg9Z3JvdXAseT1GTlIpKS<wbr>tnZW9tX2JhcihzdGF0PSdpZGVudGl0<wbr>eScpDQoNCmBgYA0KDQoNCkFzIHdlIG<wbr>NhbiBzZWUsIHRoZSBDT01QQVMgYWxn<wbr>b3JpdGhtIGlzIG5vdCBmYWlyIGFtb2<wbr>5nc3QgcmFjZXM6DQotNDUlIG9mIEFm<wbr>cmljYW4gQW1lcmljYW4gdGhhdCB3ZX<wbr>JlIHdyb25nbHkgc2NvcmVkIGFzIE1l<wbr>ZC9IaWdoIChidXQgZGlkIG5vdCByZW<wbr>NpZGl2IHdpdGhpbiB0aGUgZm9sbG93<wbr>aW5nIDIgeWVhcnMpIHdoaWxlIG9ubH<wbr>kgMjMlIGZvciBDYXVjYXNpYW5zLiAN<wbr>Ci00NyUgb2YgQ2F1Y2FzaWFucyB0aG<wbr>F0IHdlcmUgc2NvcmVkIGFzIGxvdyBy<wbr>aXNrIGRpZCByZWNpZGl2IHdpdGhpbi<wbr>AyIHllYXJzIHdoaWxlIG9ubHkgMjcl<wbr>IGZvciBBZnJpY2FuIEFtZXJpY2FuLg<wbr>0KDQoNCkhvdyBjYW4gd2UgbWFrZSB0<wbr>aGUgYWxnb3JpdGhtIG1vcmUgZmFpcj<wbr>8gDQoNCkl0IGlzIG5vdCBhbiBlYXN5<wbr>IHRhc2sgdG8gYnVpbGQgYW4gYWxnb3<wbr>JpdGhtIHRoYXQgd291bGQgbWF4aW1p<wbr>emUgdGhlIHBlcmZvcm1hbmNlIHdoaW<wbr>xlIHRyZWF0aW5nIGFsbCByYWNlcywg<wbr>Z2VuZGVyIGVxdWFsbHkuIFRoZXJlIG<wbr>lzIGEgdHJhZGVvZmYsIGFuZCwgYXMg<wbr>YSBzb2NpZXR5LCB3ZSBuZWVkIHRvIG<wbr>Nob29zZSB3aGF0IHNob3VsZCB3ZSBw<wbr>cmlvcml0aXplLiANCg0KDQpJbiB0aG<wbr>UgbmV4dCBzZWN0aW9uLCB3ZSB3aWxs<wbr>IHNob3cgaG93IGZpbmUgdHVuaW5nIH<wbr>RoZSBhbGdvcml0aG0gZm9yIGVhY2gg<wbr>Z3JvdXAgKGFwcGx5aW5nIGEgZGlmZm<wbr>VyZW50IGN1dG9mZikgd2lsbCBhbGxv<wbr>dyB1cyB0byBib3RoIGtlZXAgYSBkZW<wbr>NlbnQgcGVyZm9ybWFuY2UgKGNvbXBh<wbr>cmUgdG8gdGhlIGJhc2VsaW5lIC0gQ0<wbr>9NUEFTKSB3aGlsZSBoYXZpbmcgYW4g<wbr>QUkgbW9yZSBmYWlyIHJlZ2FyZGluZy<wbr>B0aGUgZGlzdHJpYnV0aW9uIG9mIGVy<wbr>cm9ycyBhbW9uZ3N0IHJhY2VzLiANCg<wbr>0KDQoNCg0KDQoNCg0KYGBge3IgLS0g<wbr>MiApIFR3ZWFraW5nIHRoZSBDT01QQV<wbr>MgYWxnb3JpdGhtIHRvIHJlZHVjZSBi<wbr>aWFzIGFtb25nc3QgcmFjZXN9DQoNCi<wbr>NCdWlsZCBhIG5haXZlIG1vZGVsIGZv<wbr>ciB0aGUgcHVycG9zZSBvZiBleHBsYW<wbr>5hdGlvbg0KDQoNCiMtLS0gVHJhbnNm<wbr>b3JtIGhlIGJpbmFyeSBudW1lcmljIH<wbr>RhcmdldCB2YXJpYWJsZXMgdG8gZmFj<wbr>dG9yIChjb21tZW50IGlmIG5vdCBuZW<wbr>VkZWQpIC0tLQ0KI05vdGU6IEgybyBw<wbr>YWNrYWdlIHJlcXVpcmUgdGhlIHR5cG<wbr>UgImZhY3RvciIgdG8gdHJhaW4gY2xh<wbr>c3NpZmljYXRpb24gbW9kZWxzDQoNCi<wbr>AgICBldmFsKHBhcnNlKHRleHQ9cGFz<wbr>dGUwKCJpZihsZW5ndGgodW5pcXVlKG<wbr>RmLmRhdGEkIix0cmd0X3ZhciwiKSkg<wbr>PT0gMiAmIGNsYXNzKGRmLmRhdGEuZm<wbr>UkIix0cmd0X3ZhciwiKSAlaW4lIGMo<wbr>J251bWVyaWMnKSl7ZGYuZGF0YS5mZS<wbr>QiLHRyZ3RfdmFyLCI9YXMuZmFjdG9y<wbr>KGRmLmRhdGEuZmUkIix0cmd0X3Zhci<wbr>wiKX0iKSkpDQoNCiN1cGRhdGUgdGhl<wbr>IGxpc3Qgb2YgdmFyaWFibGVzIHRvIG<wbr>V4Y2x1ZGUgZnJvbSB0aGUgdHJhaW5p<wbr>bmcgZGF0YXNldA0KdHJndC5sb25nPW<wbr>ModHJndC5sb25nLCJkZWNpbGVfc2Nv<wbr>cmVfcGN0IiwicHJlZF9jb21wYXMiLC<wbr>JjX2NoYXJnZV9kZXNjIiwicmFjZSIs<wbr>ImdlbmRlciIpDQoNCiMtLS0gU3BsaX<wbr>QgRGF0YXNldC0tLQ0Kc2V0LnNlZWQo<wbr>MTIpDQp2YWxfcGVyY2VudCA8LSAwLj<wbr>MNCnZhbF9pZHggICAgIDwtIHNhbXBs<wbr>ZSgxOm5yb3coZGYuZGF0YS5mZSkpWz<wbr>E6cm91bmQobnJvdyhkZi5kYXRhLmZl<wbr>KSAqIHZhbF9wZXJjZW50KV0NCg0KIy<wbr>BwYXJ0aXRpb24gdGhlIGRhdGENCmRm<wbr>LnRyYWluIDwtIGRmLmRhdGEuZmVbLX<wbr>ZhbF9pZHgsIF0NCmRmLnZhbCA8LSBk<wbr>Zi5kYXRhLmZlWyB2YWxfaWR4LCBdDQ<wbr>oNCiMtLSBub3RlOiBPbmUgc2hvdWxk<wbr>IHRyeSB0byBvdmVyc2FtcGxlIG1pbm<wbr>9yaXR5IHJhY2UgYW5kIHVuZGVyc2Ft<wbr>cGxlIG1ham9yaXR5IHJhY2VzLi4NCg<wbr>0KDQojLS0tIFN0YXJ0IHVwIHRoZSBI<wbr>Mk8gY2x1c3RlciBsb2NhbGx5IG9uIH<wbr>lvdXIgbWFjaGluZSAtLS0NCmgyby5p<wbr>bml0KG50aHJlYWRzID0gLTEsICNOdW<wbr>1iZXIgb2YgdGhyZWFkcyAtMSBtZWFu<wbr>cyB1c2UgYWxsIGNvcmVzIG9uIHlvdX<wbr>IgbWFjaGluZQ0KICAgICAgICAgbWF4<wbr>X21lbV9zaXplID0gIjZHIikgICNtYX<wbr>ggbWVtIHNpemUgaXMgdGhlIG1heGlt<wbr>dW0gbWVtb3J5IHRvIGFsbG9jYXRlIH<wbr>RvIEgyTw0KIA0KICAgIy0tLSBUcmFu<wbr>c2Zvcm0gZGF0YXNldCBpbnRvIEgyMC<wbr>BvYmplY3QgLS0tDQogIGRmLnRyYWlu<wbr>LmgyMCA8LWFzLmgybyhkZi50cmFpbi<wbr>kgICNoMm8uZGVzY3JpYmUoZGYudHJh<wbr>aW4uaDIwKQ0KICBkZi52YWwuaDIwID<wbr>wtYXMuaDJvKGRmLnZhbCkNCiAgDQog<wbr>IGRmLmFsbC5oMm8gPC1hcy5oMm8oZG<wbr>YuZGF0YS5mZSkNCiANCiAgIy0tLSBE<wbr>ZWZpbmUgdGFyZXQgKHkpIGFuZCBleH<wbr>BsYW5hdG9yeSB2YXJpYWJsZXMgKHgp<wbr>IC0tLQ0KICB5IDwtIHRyZ3RfdmFyIA<wbr>0KICB4IDwtIHNldGRpZmYobmFtZXMo<wbr>ZGYudHJhaW4uaDIwKSwgdHJndC5sb2<wbr>5nKQ0KDQogIA0KICAjLS0tIFRyYWlu<wbr>IE1vZGVscyB3aXRoIGgyby5hdXRvTU<wbr>woKSBmb3IgYXV0b21hdGVkIG1hY2hp<wbr>bmUgbGVhcm5pbmcgLS0tDQogICMgRG<wbr>9jczogaHR0cHM6Ly93d3cucmRvY3Vt<wbr>ZW50YXRpb24ub3JnL3BhY2thZ2VzL2<wbr>gyby92ZXJzaW9ucy8zLjIyLjEuMS90<wbr>b3BpY3MvaDJvLmF1dG9tbA0KICANCi<wbr>Agc3RfdHJhaW49U3lzLnRpbWUoKQ0K<wbr>ICANCiAgIy0tLSBUcmFpbiBtb2RlbH<wbr>MgYW5kIHN0b3JlIG1vZGVscyBpbiBo<wbr>Mm8gb2JqZWN0ICJhbWwiLS0tDQogIG<wbr>FtbCA8LSBoMm8uYXV0b21sKHkgPSB5<wbr>LCB4ID0geCwNCiAgICAgICAgICAgIC<wbr>AgICAgICAgdHJhaW5pbmdfZnJhbWUg<wbr>PSBkZi50cmFpbi5oMjAsDQogICAgIC<wbr>AgICAgICAgICAgICAgIHZhbGlkYXRp<wbr>b25fZnJhbWU9IGRmLnZhbC5oMjAsDQ<wbr>ogICAgICAgICAgICAgICAgICAgICMg<wbr>bGVhZGVyYm9hcmRfZnJhbWU9IGRmLn<wbr>Rlc3QuaDIwLA0KICAgICAgICAgICAg<wbr>ICAgICAgICBiYWxhbmNlX2NsYXNzZX<wbr>M9VFJVRSwNCiAgICAgICAgICAgICAg<wbr>ICAgICAgI2V4Y2x1ZGVfYWxnb3MgPS<wbr>BjKCJTdGFja2VkRW5zZW1ibGUiLCJE<wbr>UkYiKSwNCiAgICAgICAgICAgICAgIC<wbr>AgICAgI3N0b3BwaW5nX21ldHJpYz0g<wbr>ImxpZnRfdG9wX2dyb3VwIiwgDQogIC<wbr>AgICAgICAgICAgICAgICAgICNzb3J0<wbr>X21ldHJpYyA9ICJBVUMiLA0KICAgIC<wbr>AgICAgICAgICAgICAgICBtYXhfcnVu<wbr>dGltZV9zZWNzID0gOTk5OTk5OTksDQ<wbr>ogICAgICAgICAgICAgICAgICAgIG1h<wbr>eF9tb2RlbHMgPSA4LA0KICAgICAgIC<wbr>AgICAgICAgICAgICBzZWVkID0gMjM1<wbr>MzUpDQogIA0KICAjLS0tIFByaW50IH<wbr>RpbWUgc3BhbiBvZiBtb2RlbCB0cmFp<wbr>bmluZyAtLS0NCiAgZW5kX3RyYWluPV<wbr>N5cy50aW1lKCkNCiAgcHJpbnQocGFz<wbr>dGUwKCJIMm8uYXV0b21sKCkgdG9vay<wbr>AiLGVuZF90cmFpbi1zdF90cmFpbiwi<wbr>IHNlY29uZGVzIHRvIGNvbXBsZXRlIi<wbr>kpDQogIA0KICANCiAgIy0tLSBQcmlu<wbr>dCBMZWFkZXJib2FyZDogbW9kZWxzIH<wbr>RyYWluZWQgcmFua2VkIGJ5IHBlcmZv<wbr>cm1hbmNlcyAtLS0NCiAgbGI9YW1sQG<wbr>xlYWRlcmJvYXJkDQogIA0KICAjLS0t<wbr>IFNhdmUgTGVhZGVyYm9hcmQgLS0tDQ<wbr>ogIHdyaXRlLmNzdihhcy5kYXRhLmZy<wbr>YW1lKGxiKSxwYXN0ZTAocHJvamVjdF<wbr>9wYXRoLCJsZWFkZXJib2FyZC5jc3Yi<wbr>KSk7DQoNCiAgICAjLS0tIGNoZWNrIG<wbr>ZvciB1bmRlci9vdmVyIGZpdHRpbmcg<wbr>KEdhcCBiZXR3ZWVuIHRyYWluLCB2YW<wbr>wsIHRlc3QpIC0tLQ0KICAgIHByaW50<wbr>KCdBVUMgb2YgbGVhZGVyIG1vZGVsIG<wbr>9uIHRyYWluaW5nIGRhdGFzZXQgOicp<wbr>DQogICAgICAgICAgaDJvLmF1YyhoMm<wbr>8ucGVyZm9ybWFuY2UoYW1sQGxlYWRl<wbr>ciwgbmV3ZGF0YT1kZi50cmFpbi5oMj<wbr>ApKQ0KICAgIHByaW50KCdBVUMgb2Yg<wbr>bGVhZGVyIG1vZGVsIG9uIHZhbGlkYX<wbr>Rpb24gZGF0YXNldDonKQ0KICAgICAg<wbr>ICAgIGgyby5hdWMoaDJvLnBlcmZvcm<wbr>1hbmNlKGFtbEBsZWFkZXIsIG5ld2Rh<wbr>dGE9ZGYudmFsLmgyMCkpDQogICAgcH<wbr>JpbnQoJ0dBUCBiZXR3ZWVuIHRyYWlu<wbr>aW5nIGFuZCB2YWxpZGF0aW9uIGRhdG<wbr>FzZXQ6JykNCiAgICAgICAgICBoMm8u<wbr>YXVjKGgyby5wZXJmb3JtYW5jZShhbW<wbr>xAbGVhZGVyLCBuZXdkYXRhPWRmLnRy<wbr>YWluLmgyMCkpLWgyby5hdWMoaDJvLn<wbr>BlcmZvcm1hbmNlKGFtbEBsZWFkZXIs<wbr>IG5ld2RhdGE9ZGYudmFsLmgyMCkpDQ<wbr>ogICAgDQogICANCiAgIy0tLSBEaXNw<wbr>bGF5IGZlYXR1cmVzIGltcG9ydGFuY2<wbr>UgLS0tDQogIA0KICAjTm90ZTogIC1V<wbr>c2VmdWwgdG8gZGV0ZWN0IHRhcmdldC<wbr>BsZWFraW5nIG9yIG1hbnVhbCBzZWdt<wbr>ZW50YXRpb24gbmVlZGVkDQogICMgIC<wbr>AgICAgLVdvbid0IHdvcmsgaWYgbGVh<wbr>ZGVyIG1vZGVsIGlzIGEgU3RhY2tlZC<wbr>BFbnNlbWJsZS4gQ2FuIHRlbXBvcmFy<wbr>eSBleGNsdWRlIHRob3NlIGluIHRyYW<wbr>luaW5nIHRvIGdldCB2YXJpYWJsZSBp<wbr>bXBvcnRhbmNlDQogICAgDQogICAgIC<wbr>ANCiAgICB2YXJfaW1wPWFtbEBsZWFk<wbr>ZXJAbW9kZWwkdmFyaWFibGVfaW1wb3<wbr>J0YW5jZXMNCiAgICBoMm8udmFyaW1w<wbr>X3Bsb3QoYW1sQGxlYWRlcixudW1fb2<wbr>ZfZmVhdHVyZXMgPSAyMCkNCiAgICB3<wbr>cml0ZS5jc3YodmFyX2ltcCxwYXN0ZT<wbr>AocHJvamVjdF9wYXRoLCJ2YXJfaW1w<wbr>X25ldy5jc3YiKSkgI1NhdmUgdmFyaW<wbr>FibGUgaW1wb3J0YW5jZQ0KICAgIHdy<wbr>aXRlLmNzdihhbWxAbGVhZGVyQG1vZG<wbr>VsJHN0YW5kYXJkaXplZF9jb2VmZmlj<wbr>aWVudF9tYWduaXR1ZGVzLHBhc3RlMC<wbr>hwcm9qZWN0X3BhdGgsIi9SX09VVFBV<wbr>VC9jb2VmZl9tYWduaXR1ZGVfbmV3Lm<wbr>NzdiIpKSAjU2F2ZSB2YXJpYWJsZSBp<wbr>bXBvcnRhbmNlDQogICAgDQogIA0KIC<wbr>AgICMtLS0gU2F2ZSBMZWFkZXIgTW9k<wbr>ZWwtLS0NCiAgICBtb2RlbF9sZWFkZX<wbr>JfcGF0aCA8LSBoMm8uc2F2ZU1vZGVs<wbr>KG9iamVjdD1hbWxAbGVhZGVyLCBwYX<wbr>RoPXByb2plY3RfcGF0aCwgZm9yY2U9<wbr>VFJVRSkNCiAgICBwcmludChtb2RlbF<wbr>9sZWFkZXJfcGF0aCkNCiAgICB3cml0<wbr>ZS5jc3YocHJpbnQobW9kZWxfbGVhZG<wbr>VyX3BhdGgpLHBhc3RlMChwcm9qZWN0<wbr>X3BhdGgsIm1vZGVsX2xlYWRlcl9wYX<wbr>RoLmNzdiIpKQ0KDQogICAgDQogICMt<wbr>LS0gRmluYWwgcGVyZm9ybWFuY2VzIG<wbr>1ldHJpY3Mgb24gdGVzdCBzZXQgLS0t<wbr>DQogICAgICANCiAgICAjLS0tIFByZW<wbr>RpY3Rpb24gb24gdmFsaWRhdGlvbiBz<wbr>ZXQgLS0tDQogICAgIyBwcmVkLmgyMC<wbr>A8LSBoMm8ucHJlZGljdChhbWxAbGVh<wbr>ZGVyLCBkZi52YWwuaDIwKQ0KICAgIC<wbr>MgDQogICAgIyAjLS0tIEJ1aWxkIHBy<wbr>ZWRpY3Rpb24gZGF0YXNldA0KICAgIC<wbr>MgYT1hcy5kYXRhLmZyYW1lKGRmLnZh<wbr>bC5oMjAkaWQpICNsaW5rIGJhY2sgdG<wbr>8gbWVtYmVyIGlkDQogICAgIyBldmFs<wbr>KHBhcnNlKHRleHQ9cGFzdGUwKCJiPW<wbr>FzLmRhdGEuZnJhbWUoZGYudmFsLmgy<wbr>MCQiLHRyZ3RfdmFyLCIpIikpKSAjbG<wbr>luayBiYWNrIHRvIHRhcmV0IHZhcmlh<wbr>YmxlDQogICAgIyBjPWFzLmRhdGEuZn<wbr>JhbWUocHJlZC5oMjAkcDEpICMgaW5j<wbr>bHVkZSBwcm9iYWJpbGl0eSANCiAgIC<wbr>AjIGQ9YXMuZGF0YS5mcmFtZShhcy5u<wbr>dW1lcmljKHByZWQuaDIwJHByZWRpY3<wbr>QpKSAjIGtlZXAgYXV0b21hdGVkIHBy<wbr>ZWRpY3RlZCB2YWx1ZSBiYXNlZCBvbi<wbr>BoMm8gb3B0aW1hbCBmMS9mMiBmdW5j<wbr>dGlvbnMNCiAgICAjIGU9YXMuZGF0YS<wbr>5mcmFtZShkZi52YWwuaDIwJHJhY2Up<wbr>DQogICAgIyBmPWFzLmRhdGEuZnJhbW<wbr>UoZGYudmFsLmgyMCRzZXgpDQogICAg<wbr>DQogICAgIHByZWQuaDIwIDwtIGgyby<wbr>5wcmVkaWN0KGFtbEBsZWFkZXIsIGRm<wbr>LmFsbC5oMm8pDQogIA0KICAgICMtLS<wbr>0gQnVpbGQgcHJlZGljdGlvbiBkYXRh<wbr>c2V0DQogICAgYT1hcy5kYXRhLmZyYW<wbr>1lKGRmLmFsbC5oMm8kaWQpICNsaW5r<wbr>IGJhY2sgdG8gbWVtYmVyIGlkDQogIC<wbr>AgZXZhbChwYXJzZSh0ZXh0PXBhc3Rl<wbr>MCgiYj1hcy5kYXRhLmZyYW1lKGRmLm<wbr>FsbC5oMm8kIix0cmd0X3ZhciwiKSIp<wbr>KSkgI2xpbmsgYmFjayB0byB0YXJldC<wbr>B2YXJpYWJsZQ0KICAgIGM9YXMuZGF0<wbr>YS5mcmFtZShwcmVkLmgyMCRwMSkgIy<wbr>BpbmNsdWRlIHByb2JhYmlsaXR5IA0K<wbr>ICAgIGQ9YXMuZGF0YS5mcmFtZShhcy<wbr>5udW1lcmljKHByZWQuaDIwJHByZWRp<wbr>Y3QpKSAjIGtlZXAgYXV0b21hdGVkIH<wbr>ByZWRpY3RlZCB2YWx1ZSBiYXNlZCBv<wbr>biBoMm8gb3B0aW1hbCBmMS9mMiBmdW<wbr>5jdGlvbnMNCiAgICBlPWFzLmRhdGEu<wbr>ZnJhbWUoZGYuYWxsLmgybyRyYWNlKQ<wbr>0KICAgIGY9YXMuZGF0YS5mcmFtZShk<wbr>Zi5hbGwuaDJvJHNleCkNCiAgICANCi<wbr>AgICBwcmVkX3RhYmxlPWFzLmRhdGEu<wbr>ZnJhbWUoY2JpbmQoYSxiLGMsZCxlLG<wbr>YpKQ0KICAgIHJtKGEsYixjLGQsZSxm<wbr>KQ0KICAgIA0KICAgICNSZW5hbWUgY2<wbr>9sdW1ucw0KICAgICAgY29sbmFtZXMo<wbr>cHJlZF90YWJsZSk9YygiaWQiLHBhc3<wbr>RlMCh0cmd0X3ZhciksImRlY2lsZV9z<wbr>Y29yZV9wY3QiLCJwcmVkX2NvbXBhcy<wbr>IsInJhY2UiLCJnZW5kZXIiKQ0KDQog<wbr>ICAgICANCiAjLS0gRmluZCBQcm9iYW<wbr>JpbGl0eSBUaHJlc2hvbGQgLS0tDQog<wbr>ICAgZmluZF90aHJlc2hvbGRfdGFibG<wbr>U9ZmluZF90aHJlc2hvbGQoIHByZWRf<wbr>dGFibGU9cHJlZF90YWJsZSkgIyBHZX<wbr>Qga2V5IHBlcmZvcm1hbmNlIG1ldHJp<wbr>Y3MgZm9yIHdhbnRlZCBwcm9iYWJpbG<wbr>l0eSBjdXQtb2ZmIHBvaW50cw0KICAg<wbr>IGZpbmRfdGhyZXNob2xkX3RhYmxlX0<wbr>FmcmljYW5fQW1lcmljYW49ZmluZF90<wbr>aHJlc2hvbGQoIHByZWRfdGFibGU9cH<wbr>JlZF90YWJsZVtwcmVkX3RhYmxlJHJh<wbr>Y2U9PSJBZnJpY2FuLUFtZXJpY2FuIi<wbr>xdKQ0KICAgIGZpbmRfdGhyZXNob2xk<wbr>X3RhYmxlX0NhdWNhc2lhbj1maW5kX3<wbr>RocmVzaG9sZCggcHJlZF90YWJsZT1w<wbr>cmVkX3RhYmxlW3ByZWRfdGFibGUkcm<wbr>FjZT09IkNhdWNhc2lhbiIsXSkNCiAg<wbr>ICBmaW5kX3RocmVzaG9sZF90YWJsZV<wbr>9PdGhlcj1maW5kX3RocmVzaG9sZCgg<wbr>cHJlZF90YWJsZT1wcmVkX3RhYmxlW3<wbr>ByZWRfdGFibGUkcmFjZT09Ik90aGVy<wbr>IixdKQ0KICAgIGZpbmRfdGhyZXNob2<wbr>xkX3RhYmxlX0hpc3BhbmljPWZpbmRf<wbr>dGhyZXNob2xkKCBwcmVkX3RhYmxlPX<wbr>ByZWRfdGFibGVbcHJlZF90YWJsZSRy<wbr>YWNlPT0iSGlzcGFuaWMiLF0pDQogIC<wbr>AgZmluZF90aHJlc2hvbGRfdGFibGVf<wbr>TmF0aXZlX0FtZXJpY2FuPWZpbmRfdG<wbr>hyZXNob2xkKCBwcmVkX3RhYmxlPXBy<wbr>ZWRfdGFibGVbcHJlZF90YWJsZSRyYW<wbr>NlPT0iTmF0aXZlIEFtZXJpY2FuIixd<wbr>KQ0KICAgIGZpbmRfdGhyZXNob2xkX3<wbr>RhYmxlX0FzaWFuPWZpbmRfdGhyZXNo<wbr>b2xkKCBwcmVkX3RhYmxlPXByZWRfdG<wbr>FibGVbcHJlZF90YWJsZSRyYWNlPT0i<wbr>QXNpYW4iLF0pDQogDQogICAgICAjc2<wbr>F2ZSBvdXRwdXQ6DQogICAgICB3cml0<wbr>ZS5jc3YoZmluZF90aHJlc2hvbGRfdG<wbr>FibGVfQWZyaWNhbl9BbWVyaWNhbixw<wbr>YXN0ZTAocHJvamVjdF9wYXRoLCIvUl<wbr>9PVVRQVVQvSDJvX2ZpbmRfdGhyZXNo<wbr>b2xkX3RhYmxlX0FmcmljYW5fQW1lcm<wbr>ljYW4uY3N2IikpOw0KICAgICAgd3Jp<wbr>dGUuY3N2KGZpbmRfdGhyZXNob2xkX3<wbr>RhYmxlX0NhdWNhc2lhbixwYXN0ZTAo<wbr>cHJvamVjdF9wYXRoLCIvUl9PVVRQVV<wbr>QvSDJvX2ZpbmRfdGhyZXNob2xkX3Rh<wbr>YmxlX0NhdWNhc2lhbi5jc3YiKSk7DQ<wbr>ogICAgICB3cml0ZS5jc3YoZmluZF90<wbr>aHJlc2hvbGRfdGFibGVfT3RoZXIscG<wbr>FzdGUwKHByb2plY3RfcGF0aCwiL1Jf<wbr>T1VUUFVUL0gyb19maW5kX3RocmVzaG<wbr>9sZF90YWJsZV9PdGhlci5jc3YiKSk7<wbr>DQogICAgICB3cml0ZS5jc3YoZmluZF<wbr>90aHJlc2hvbGRfdGFibGVfSGlzcGFu<wbr>aWMscGFzdGUwKHByb2plY3RfcGF0aC<wbr>wiL1JfT1VUUFVUL0gyb19maW5kX3Ro<wbr>cmVzaG9sZF90YWJsZV9IaXNwYW5pYy<wbr>5jc3YiKSk7DQogICAgICB3cml0ZS5j<wbr>c3YoZmluZF90aHJlc2hvbGRfdGFibG<wbr>VfTmF0aXZlX0FtZXJpY2FuLHBhc3Rl<wbr>MChwcm9qZWN0X3BhdGgsIi9SX09VVF<wbr>BVVC9IMm9fZmluZF90aHJlc2hvbGRf<wbr>dGFibGVfTmF0aXZlX0FtZXJpY2FuLm<wbr>NzdiIpKTsNCiAgICAgIHdyaXRlLmNz<wbr>dihmaW5kX3RocmVzaG9sZF90YWJsZV<wbr>9Bc2lhbixwYXN0ZTAocHJvamVjdF9w<wbr>YXRoLCIvUl9PVVRQVVQvSDJvX2Zpbm<wbr>RfdGhyZXNob2xkX3RhYmxlX0FzaWFu<wbr>LmNzdiIpKTsNCiAgICAgIHdyaXRlLm<wbr>NzdihmaW5kX3RocmVzaG9sZF90YWJs<wbr>ZSxwYXN0ZTAocHJvamVjdF9wYXRoLC<wbr>IvUl9PVVRQVVQvSDJvX2ZpbmRfdGhy<wbr>ZXNob2xkX3RhYmxlX292ZXJhbGwuY3<wbr>N2IikpOw0KICANCiAgICAgIA0KICAg<wbr>ICAgDQogICNDcmVhdGUgUGVyZm9ybW<wbr>FuY2UgdGFibGUgZm9yIHJlcGxpY2F0<wbr>ZSBvZiBDT01QQVMgc2NvcmUgIA0KIC<wbr>AgICAgI05PVEVTOiBUaGUgY3V0b2Zm<wbr>cyB3ZXJlIGNob3NlbiBpbiBvcmRlci<wbr>B0byBoYXZlIGFuIGVxdWFsIGVycm9y<wbr>IHJhdGUgYW1vbmdzdCByYWNlcy4uDQ<wbr>ogICAgDQogICAgcGVyZl9vdmVyYWxs<wbr>PWFzLmRhdGEuZnJhbWUoY2JpbmQoJ0<wbr>92ZXJhbGwnLGZpbmRfdGhyZXNob2xk<wbr>X3RhYmxlW2ZpbmRfdGhyZXNob2xkX3<wbr>RhYmxlJHRocmVzaG9sZD09MC41LF0p<wbr>KQ0KICAgIHBlcmZfQWZyaWNhbl9BbW<wbr>VyaWNhbj1hcy5kYXRhLmZyYW1lKGNi<wbr>aW5kKCdBZnJpY2FuIEFtZXJpY2FuJy<wbr>xmaW5kX3RocmVzaG9sZF90YWJsZV9B<wbr>ZnJpY2FuX0FtZXJpY2FuW2ZpbmRfdG<wbr>hyZXNob2xkX3RhYmxlX0FmcmljYW5f<wbr>QW1lcmljYW4kdGhyZXNob2xkPT0wLj<wbr>UsXSkpDQogICAgcGVyZl9DYXVjYXNp<wbr>YW49YXMuZGF0YS5mcmFtZShjYmluZC<wbr>gnQ2F1Y2FzaWFuJyxmaW5kX3RocmVz<wbr>aG9sZF90YWJsZV9DYXVjYXNpYW5bZm<wbr>luZF90aHJlc2hvbGRfdGFibGVfQ2F1<wbr>Y2FzaWFuJHRocmVzaG9sZD09MC41LF<wbr>0pKQ0KICAgIHBlcmZfT3RoZXI9YXMu<wbr>ZGF0YS5mcmFtZShjYmluZCgnT3RoZX<wbr>InLGZpbmRfdGhyZXNob2xkX3RhYmxl<wbr>X090aGVyW2ZpbmRfdGhyZXNob2xkX3<wbr>RhYmxlX090aGVyJHRocmVzaG9sZD09<wbr>MC41LF0pKQ0KICAgIHBlcmZfSGlzcG<wbr>FuaWM9YXMuZGF0YS5mcmFtZShjYmlu<wbr>ZCgnSGlzcGFuaWMnLGZpbmRfdGhyZX<wbr>Nob2xkX3RhYmxlX0hpc3BhbmljW2Zp<wbr>bmRfdGhyZXNob2xkX3RhYmxlX0hpc3<wbr>BhbmljJHRocmVzaG9sZD09MC41LF0p<wbr>KQ0KICAgIHBlcmZfTmF0aXZlX0FtZX<wbr>JpY2FuPWFzLmRhdGEuZnJhbWUoY2Jp<wbr>bmQoJ05hdGl2ZSBBbWVyaWNhbicsZm<wbr>luZF90aHJlc2hvbGRfdGFibGVfTmF0<wbr>aXZlX0FtZXJpY2FuW2ZpbmRfdGhyZX<wbr>Nob2xkX3RhYmxlX05hdGl2ZV9BbWVy<wbr>aWNhbiR0aHJlc2hvbGQ9PTAuNSxdKS<wbr>kNCiAgICBwZXJmX0FzaWFuPWFzLmRh<wbr>dGEuZnJhbWUoY2JpbmQoJ0FzaWFuJy<wbr>xmaW5kX3RocmVzaG9sZF90YWJsZV9B<wbr>c2lhbltmaW5kX3RocmVzaG9sZF90YW<wbr>JsZV9Bc2lhbiR0aHJlc2hvbGQ9PTAu<wbr>NSxdKSkNCiAgICANCiAgICBjb2xuYW<wbr>1lcyhwZXJmX292ZXJhbGwpWzFdPWMo<wbr>Imdyb3VwIikNCiAgICBjb2xuYW1lcy<wbr>hwZXJmX0FmcmljYW5fQW1lcmljYW4p<wbr>WzFdPWMoImdyb3VwIikNCiAgICBjb2<wbr>xuYW1lcyhwZXJmX0NhdWNhc2lhbilb<wbr>MV09YygiZ3JvdXAiKQ0KICAgIGNvbG<wbr>5hbWVzKHBlcmZfT3RoZXIpWzFdPWMo<wbr>Imdyb3VwIikNCiAgICBjb2xuYW1lcy<wbr>hwZXJmX0hpc3BhbmljKVsxXT1jKCJn<wbr>cm91cCIpDQogICAgY29sbmFtZXMocG<wbr>VyZl9OYXRpdmVfQW1lcmljYW4pWzFd<wbr>PWMoImdyb3VwIikNCiAgICBjb2xuYW<wbr>1lcyhwZXJmX0FzaWFuKVsxXT1jKCJn<wbr>cm91cCIpDQogICAgDQogICAgDQogIC<wbr>AgI01lcmdlIHBlcmZvcm1hbmNlcyBt<wbr>ZXRyaWNzDQogICAgcGVyZl9hbGxfaD<wbr>JvPWFzLmRhdGEuZnJhbWUocmJpbmQo<wbr>cGVyZl9BZnJpY2FuX0FtZXJpY2FuLH<wbr>BlcmZfQ2F1Y2FzaWFuLHBlcmZfT3Ro<wbr>ZXIscGVyZl9IaXNwYW5pYyxwZXJmX0<wbr>5hdGl2ZV9BbWVyaWNhbixwZXJmX0Fz<wbr>aWFuKSkNCiAgICANCiAgICAgICAgDQ<wbr>ogICAgICANCiAgICAgIA0KICAgICAg<wbr>ICANCiAgI0NyZWF0ZSBQZXJmb3JtYW<wbr>5jZSB0YWJsZSBmb3IgIm5vcm1hbGl6<wbr>ZWQiIHNjb3JlICANCiAgICAgICNOT1<wbr>RFUzogVGhlIGN1dG9mZnMgd2VyZSBj<wbr>aG9zZW4gaW4gb3JkZXIgdG8gaGF2ZS<wbr>BhbiBlcXVhbCBlcnJvciByYXRlIGFt<wbr>b25nc3QgcmFjZXMuLg0KICAgIA0KIC<wbr>AgIHBlcmZfb3ZlcmFsbD1hcy5kYXRh<wbr>LmZyYW1lKGNiaW5kKCdPdmVyYWxsJy<wbr>xmaW5kX3RocmVzaG9sZF90YWJsZVtm<wbr>aW5kX3RocmVzaG9sZF90YWJsZSR0aH<wbr>Jlc2hvbGQ9PTAuNSxdKSkNCiAgICBw<wbr>ZXJmX0FmcmljYW5fQW1lcmljYW49YX<wbr>MuZGF0YS5mcmFtZShjYmluZCgnQWZy<wbr>aWNhbiBBbWVyaWNhbicsZmluZF90aH<wbr>Jlc2hvbGRfdGFibGVfQWZyaWNhbl9B<wbr>bWVyaWNhbltmaW5kX3RocmVzaG9sZF<wbr>90YWJsZV9BZnJpY2FuX0FtZXJpY2Fu<wbr>JHRocmVzaG9sZD09MC41NixdKSkNCi<wbr>AgICBwZXJmX0NhdWNhc2lhbj1hcy5k<wbr>YXRhLmZyYW1lKGNiaW5kKCdDYXVjYX<wbr>NpYW4nLGZpbmRfdGhyZXNob2xkX3Rh<wbr>YmxlX0NhdWNhc2lhbltmaW5kX3Rocm<wbr>VzaG9sZF90YWJsZV9DYXVjYXNpYW4k<wbr>dGhyZXNob2xkPT0wLjQzLF0pKQ0KIC<wbr>AgIHBlcmZfT3RoZXI9YXMuZGF0YS5m<wbr>cmFtZShjYmluZCgnT3RoZXInLGZpbm<wbr>RfdGhyZXNob2xkX3RhYmxlX090aGVy<wbr>W2ZpbmRfdGhyZXNob2xkX3RhYmxlX0<wbr>90aGVyJHRocmVzaG9sZD09MC40Myxd<wbr>KSkNCiAgICBwZXJmX0hpc3BhbmljPW<wbr>FzLmRhdGEuZnJhbWUoY2JpbmQoJ0hp<wbr>c3BhbmljJyxmaW5kX3RocmVzaG9sZF<wbr>90YWJsZV9IaXNwYW5pY1tmaW5kX3Ro<wbr>cmVzaG9sZF90YWJsZV9IaXNwYW5pYy<wbr>R0aHJlc2hvbGQ9PTAuNDQsXSkpDQog<wbr>ICAgcGVyZl9OYXRpdmVfQW1lcmljYW<wbr>49YXMuZGF0YS5mcmFtZShjYmluZCgn<wbr>TmF0aXZlIEFtZXJpY2FuJyxmaW5kX3<wbr>RocmVzaG9sZF90YWJsZV9OYXRpdmVf<wbr>QW1lcmljYW5bZmluZF90aHJlc2hvbG<wbr>RfdGFibGVfTmF0aXZlX0FtZXJpY2Fu<wbr>JHRocmVzaG9sZD09MC41OSxdKSkNCi<wbr>AgICBwZXJmX0FzaWFuPWFzLmRhdGEu<wbr>ZnJhbWUoY2JpbmQoJ0FzaWFuJyxmaW<wbr>5kX3RocmVzaG9sZF90YWJsZV9Bc2lh<wbr>bltmaW5kX3RocmVzaG9sZF90YWJsZV<wbr>9Bc2lhbiR0aHJlc2hvbGQ9PTAuNCxd<wbr>KSkNCiAgICANCiAgICBjb2xuYW1lcy<wbr>hwZXJmX292ZXJhbGwpWzFdPWMoImdy<wbr>b3VwIikNCiAgICBjb2xuYW1lcyhwZX<wbr>JmX0FmcmljYW5fQW1lcmljYW4pWzFd<wbr>PWMoImdyb3VwIikNCiAgICBjb2xuYW<wbr>1lcyhwZXJmX0NhdWNhc2lhbilbMV09<wbr>YygiZ3JvdXAiKQ0KICAgIGNvbG5hbW<wbr>VzKHBlcmZfT3RoZXIpWzFdPWMoImdy<wbr>b3VwIikNCiAgICBjb2xuYW1lcyhwZX<wbr>JmX0hpc3BhbmljKVsxXT1jKCJncm91<wbr>cCIpDQogICAgY29sbmFtZXMocGVyZl<wbr>9OYXRpdmVfQW1lcmljYW4pWzFdPWMo<wbr>Imdyb3VwIikNCiAgICBjb2xuYW1lcy<wbr>hwZXJmX0FzaWFuKVsxXT1jKCJncm91<wbr>cCIpDQogICAgDQogICAgDQogICAgI0<wbr>1lcmdlIHBlcmZvcm1hbmNlcyBtZXRy<wbr>aWNzDQogICAgcGVyZl9hbGxfaDJvX2<wbr>5ybWx6PWFzLmRhdGEuZnJhbWUocmJp<wbr>bmQocGVyZl9BZnJpY2FuX0FtZXJpY2<wbr>FuLHBlcmZfQ2F1Y2FzaWFuLHBlcmZf<wbr>T3RoZXIscGVyZl9IaXNwYW5pYyxwZX<wbr>JmX05hdGl2ZV9BbWVyaWNhbixwZXJm<wbr>X0FzaWFuKSkNCiAgICBoZWFkKHBlcm<wbr>ZfYWxsX2gyb19ucm1seikNCiAgICAN<wbr>CiAgICANCiAgICAjU2F2ZSBQZXJmb3<wbr>JtYW5jZSBtZXRyaWNzIGJ5IHJhY2Ug<wbr>Zm9yIENPTVBBUyBhbmQgT3VyIEFsZ2<wbr>9yaXRobQ0KICAgIHdyaXRlLmNzdihw<wbr>ZXJmX2FsbF9oMm8scGFzdGUwKHByb2<wbr>plY3RfcGF0aCwiL1JfT1VUUFVUL1Bl<wbr>cmZfbWV0cmljc19ieXJhY2VfQ09NUE<wbr>FTLmNzdiIpKTsNCiAgICB3cml0ZS5j<wbr>c3YocGVyZl9hbGxfaDJvX25ybWx6LH<wbr>Bhc3RlMChwcm9qZWN0X3BhdGgsIi9S<wbr>X09VVFBVVC9QZXJmX21ldHJpY3NfYn<wbr>lyYWNlX291ckFsZ28uY3N2IikpOw0K<wbr>DQojIyMgRGlzcGxheSAgT2xkIFZlcn<wbr>N1cyBuZXcgbWV0cmljcyAgLy8vIG5v<wbr>dGVzOiBBZGQgdGl0bGUsICsgZGF0YS<wbr>Bwb2ludHMgKyBheGlzIGxhYmVsIC8v<wbr>ICsgcGVyZm9ybWFuY2UgdmFyaWF0aW<wbr>9uDQoNCiAgICAjUmlzayBvZiB3cm9u<wbr>Z2x5IGFzc2lnbmluZyBtZWQvaGlnaC<wbr>ByaXNrIHRvIGVhY2ggZ3JvdXANCiAg<wbr>ICANCiAgICAjQ09tcGFzDQogICAgZ2<wbr>dwbG90KHBlcmZfYWxsLGFlcyh4PWdy<wbr>b3VwLHk9RlBSKSkrZ2VvbV9iYXIoc3<wbr>RhdD0naWRlbnRpdHknKQ0KICAgICNB<wbr>ZnRlciB0d2Vhaw0KICAgIGdncGxvdC<wbr>hwZXJmX2FsbF9oMm9fbnJtbHosYWVz<wbr>KHg9Z3JvdXAseT1GUFIpKStnZW9tX2<wbr>JhcihzdGF0PSdpZGVudGl0eScpDQog<wbr>ICAgDQogICANCiAgICANCiAgICANCi<wbr>AgICAjUmlzayBvZiB3cm9uZ2x5IGFz<wbr>c2lnbmluZyBhIGxvdyBzY29yZSAoIG<wbr>1pc3NpbmcgdG8gZGV0ZWN0IHNvbWVv<wbr>bmUgd2hvIHdpbGwgcmUtb2ZmZW5jZS<wbr>kgDQogICAgICNDb21wYXMNCiAgICBn<wbr>Z3Bsb3QocGVyZl9hbGwsYWVzKHg9Z3<wbr>JvdXAseT1GTlIpKStnZW9tX2Jhcihz<wbr>dGF0PSdpZGVudGl0eScpDQogICAgIy<wbr>BBZnRlciBUd2Vhaw0KICAgIGdncGxv<wbr>dChwZXJmX2FsbF9oMm9fbnJtbHosYW<wbr>VzKHg9Z3JvdXAseT1GTlIpKStnZW9t<wbr>X2JhcihzdGF0PSdpZGVudGl0eScpDQ<wbr>ogICAgDQogICAgDQogICAgYT1hcy5k<wbr>YXRhLmZyYW1lKHBlcmZfYWxsX2gyb1<wbr>twZXJmX2FsbF9oMm8kZ3JvdXAgJWlu<wbr>JSBjKCdBZnJpY2FuIEFtZXJpY2FuJy<wbr>wnQ2F1Y2FzaWFuJyksIGMoJ2dyb3Vw<wbr>JyldKQ0KICAgIGI9YXMuZGF0YS5mcm<wbr>FtZShwZXJmX2FsbF9oMm9bcGVyZl9h<wbr>bGxfaDJvJGdyb3VwICVpbiUgYygnQW<wbr>ZyaWNhbiBBbWVyaWNhbicsJ0NhdWNh<wbr>c2lhbicpLCBjKCdnZF9jbF9yYXRlJy<wbr>ldKQ0KICAgIGM9YXMuZGF0YS5mcmFt<wbr>ZShwZXJmX2FsbF9oMm9fbnJtbHpbcG<wbr>VyZl9hbGxfaDJvX25ybWx6JGdyb3Vw<wbr>ICVpbiUgYygnQWZyaWNhbiBBbWVyaW<wbr>NhbicsJ0NhdWNhc2lhbicpLCBjKCdn<wbr>ZF9jbF9yYXRlJyldKQ0KICAgIGQ9YX<wbr>MuZGF0YS5mcmFtZShwZXJmX2FsbF9o<wbr>Mm9bcGVyZl9hbGxfaDJvJGdyb3VwIC<wbr>VpbiUgYygnQWZyaWNhbiBBbWVyaWNh<wbr>bicsJ0NhdWNhc2lhbicpLCBjKCdGUF<wbr>InKV0pDQogICAgZT1hcy5kYXRhLmZy<wbr>YW1lKHBlcmZfYWxsX2gyb19ucm1sel<wbr>twZXJmX2FsbF9oMm9fbnJtbHokZ3Jv<wbr>dXAgJWluJSBjKCdBZnJpY2FuIEFtZX<wbr>JpY2FuJywnQ2F1Y2FzaWFuJyksIGMo<wbr>J0ZQUicpXSkNCiAgICBmPWFzLmRhdG<wbr>EuZnJhbWUocGVyZl9hbGxfaDJvW3Bl<wbr>cmZfYWxsX2gybyRncm91cCAlaW4lIG<wbr>MoJ0FmcmljYW4gQW1lcmljYW4nLCdD<wbr>YXVjYXNpYW4nKSwgYygnRk5SJyldKQ<wbr>0KICAgIGc9YXMuZGF0YS5mcmFtZShw<wbr>ZXJmX2FsbF9oMm9fbnJtbHpbcGVyZl<wbr>9hbGxfaDJvX25ybWx6JGdyb3VwICVp<wbr>biUgYygnQWZyaWNhbiBBbWVyaWNhbi<wbr>csJ0NhdWNhc2lhbicpLCBjKCdGTlIn<wbr>KV0pDQogICAgDQogICAgDQogIA0KIC<wbr>AgIA0KICAgIHRhYmxlX2dyYXBoX2Zp<wbr>bmFsPWNiaW5kKGEsYixjLGQsZSxmLG<wbr>cpDQogICAgY29sbmFtZXModGFibGVf<wbr>Z3JhcGhfZmluYWwpPWMoInJhY2UiLC<wbr>JHb29kIENsYXNzaWZpY2F0aW9uIFJh<wbr>dGUgQ09NUEFTIiwgIkdvb2QgQ2xhc3<wbr>NpZmljYXRpb24gUmF0ZSBDT01QQVMg<wbr>RmFpciIsICJGUFIgQ09NUEFTIiwiRl<wbr>BSIENPTVBBUyBGYWlyIiwiRk5SIENP<wbr>TVBBUyIsIkZOUiBDT01QQVMgRmFpci<wbr>IpDQogICAgDQogICNVbnBpdm90IFRh<wbr>YmxlDQogICAgdGFibGVfZ3JhcGhfZm<wbr>luYWwyIDwtIG1lbHQodGFibGVfZ3Jh<wbr>cGhfZmluYWwsIGlkID0gYygicmFjZS<wbr>IpKQ0KICAgIGNvbG5hbWVzKHRhYmxl<wbr>X2dyYXBoX2ZpbmFsMilbMjozXT1jKC<wbr>dQZXJmb3JtYW5jZSBhbmQgRmFpcm5l<wbr>c3MgTWV0cmljcycsJ1ZhbHVlICglKS<wbr>cpDQogICAgDQogICAgdGFibGVfZ3Jh<wbr>cGhfZmluYWwyJCdWYWx1ZSAoJSknPX<wbr>RhYmxlX2dyYXBoX2ZpbmFsMiQnVmFs<wbr>dWUgKCUpJyoxMDANCiAgICB0YWJsZV<wbr>9ncmFwaF9maW5hbDIkJ1BlcmZvcm1h<wbr>bmNlIGFuZCBGYWlybmVzcyBNZXRyaW<wbr>NzJz1hcy5mYWN0b3IodGFibGVfZ3Jh<wbr>cGhfZmluYWwyJCdQZXJmb3JtYW5jZS<wbr>BhbmQgRmFpcm5lc3MgTWV0cmljcycp<wbr>DQogICAgDQogICAgd3JpdGUuY3N2KH<wbr>ggPSB0YWJsZV9ncmFwaF9maW5hbDIs<wbr>cGFzdGUwKHByb2plY3RfcGF0aCwiL1<wbr>JfT1VUUFVUL2ZpbmFsX2NvbXBhcmlz<wbr>b25fZXJyb3IuY3N2IikpOw0KICAgIH<wbr>dyaXRlLmNzdih4ID0gdGFibGVfZ3Jh<wbr>cGhfZmluYWwscGFzdGUwKHByb2plY3<wbr>RfcGF0aCwiL1JfT1VUUFVUL2ZpbmFs<wbr>X2NvbXBhcmlzb25fZXJyb3IyLmNzdi<wbr>IpKTsNCiAgI0Rpc3BsYXkgT3ZlcmFs<wbr>bCBncmFwaCAhISEhIE5lZWQgdG8gcm<wbr>V3b3JrIHRoaXMgLCBkb2Vzbid0IHdv<wbr>cmsuLiEhISAgDQogIGdncGxvdCh0YW<wbr>JsZV9ncmFwaF9maW5hbDIsIGFlcyhm<wbr>YWN0b3IoJ1BlcmZvcm1hbmNlIGFuZC<wbr>BGYWlybmVzcyBNZXRyaWNzJyksICdW<wbr>YWx1ZSAoJSknLCBmaWxsID0gcmFjZS<wbr>ApKSArIA0KICBnZW9tX2JhcihzdGF0<wbr>PSJpZGVudGl0eSIsIHBvc2l0aW9uID<wbr>0gImRvZGdlIikgKyANCiAgc2NhbGVf<wbr>ZmlsbF9icmV3ZXIocGFsZXR0ZSA9IC<wbr>JTZXQxIikNCiAgDQogIA0KDQogICAg<wbr>DQojLS0tIENsb3NlIEgybyBDbHVzdG<wbr>VyIC0tLQ0KaDJvLnNodXRkb3duKHBy<wbr>b21wdCA9IEZBTFNFKQ0KICAgIA0KDQ<wbr>oNCmBgYA0KDQoNCg0KV2UgY2FuIHNl<wbr>ZSBhbiBpbXByb3ZlbWVudCBpbiB0ZX<wbr>JtcyBvZiBiaWFzIGFtb25nc3QgcmFj<wbr>ZXMuIA0KDQpGb3IgYSByZWR1Y3Rpb2<wbr>4gaW4gR29vZCBjbGFzc2lmaWNhdGlv<wbr>biByYXRlIG9mIGxlc3MgdGhhbiAxJS<wbr>AoMC43NSBmb3IgQ2F1Y2FzaWFuIGFu<wbr>IDAuMjglIGZvciBBZnJpY2FuIEFtZX<wbr>JpY2FuKSwgd2UgcmVkdWNlZCBkcmFz<wbr>dGljYWxseSB0aGUgYmlhcyBvZiBlcn<wbr>Jvci4gDQotV2l0aCBDT01QQVMgYWxn<wbr>b3JpdGhtLCBBZnJpY2FuIEFtZXJpY2<wbr>FuIHdlcmUgMi4xNCB0aW1lcyBtb3Jl<wbr>IGxpa2VseSB0byBiZSBzY29yZWQgZX<wbr>Jyb25lb3VzbHkgYXMgZnV0dXJlIHJl<wbr>Y2lkaXZpc3Qgd2hlbiBjb21wYXJlZC<wbr>B0byBBZnJpY2FuIEFtZXJpY2FuLiBB<wbr>ZnJpY2FuIEFtZXJpY2FuIGhhdmUgbm<wbr>93IHRoZSBzYW1lIGNoYW5jZSBvZiBi<wbr>ZWluZyBmYXVsdHkgc2NvcmVkIGFzIG<wbr>Z1dHVyZSByZWNpZGl2aXN0IGJ5IHRo<wbr>ZSBhbGdvcml0aG0gKDIyJSkuIA0KLV<wbr>dpdGggQ09NUEFTIGFsZ29yaXRobSwg<wbr>Q2F1Y2FzaWFucyB3ZXJlIDIuMjUgdG<wbr>ltZXMgbW9yZSBsaWtlbHkgdGhhbiBB<wbr>ZnJpY2FuIEFtZXJpY2FuIHRvIGJlIG<wbr>Vycm9uZW91c2x5IHNjb3JlZCBhcyBu<wbr>b24gZnV0dXJlIHJlY2lkaXZpc3QgKG<wbr>xvdykuIFRoaXMgbnVtYmVyIGlzIG5v<wbr>dyBiYWNrIHRvIDEuMDYuDQoNCg0KDQ<wbr>oNCg0KTGltaXRhdGlvbnM6IA0KTm90<wbr>IGVub3VnaCBkYXRhIHlldCBpbiB0aG<wbr>UgdmFsaWRhdGlvbiBzZXQgZm9yIEFz<wbr>aWFuIGFuZCBOYXRpdmUgQW1lcmljYW<wbr>4gY29tbXVuaXRpZXMuLiBtaWdodCB3<wbr>YW50IHRvIGluY3JlYXNlIGl0IGFuIH<wbr>JlLXJ1biBpdA0KV291bGQgbmVlZCB0<wbr>byBkbyB0aGUgc2FtZSBleGVyY2lzZS<wbr>Bmb3IgR2VuZGVyIA0KDQoNCg0KDQpg<wbr>YGB7ciBHZXR0aW5nIGFuIGV4YW1wbG<wbr>UgZm9yIHRoZSAiRGVtbyIgfQ0KDQoN<wbr>CiNBcHBseSBkZWNpbGVzIGJ5IGdyb3<wbr>VwIGluIG9yZGVyIHRvIHNlZSB0aGUg<wbr>Y2hhbmdlIGluIHRoZSBzY29yZSwgZG<wbr>VjaWxlPyBXaWxsIHdvcmsgZm9yIHNo<wbr>b3djYXNlIGJ1dCB3b3VsZCBuZWVkIH<wbr>RvIHB1dCBtb3JlIHRoaW5raW5nIGlu<wbr>dG8gdGhpcyB0byB1bmRlcnN0YW5kIH<wbr>RoZSBpbXBhY3QuDQoNCnByZWQuaDIw<wbr>LmNhc2U9IG11dGF0ZShwcmVkX3RhYm<wbr>xlLCBkZWNpbGVfcmFuayA9IG50aWxl<wbr>KHByZWRfdGFibGUkZGVjaWxlX3Njb3<wbr>JlX3BjdCwxMCkpDQoNCg0KIyMjIyBx<wbr>dWFudGlsZSByYW5rIG9mIHRoZSBjb2<wbr>x1bW4gYnkgZ3JvdXANCnByZWQuaDIw<wbr>LmNhc2U9IHByZWQuaDIwLmNhc2UgJT<wbr>4lIGdyb3VwX2J5KHJhY2UpICU+<wbr>JQ0KICBtdXRhdGUoZGVjaWxlX3Jhbm<wbr>tfYnlfSXRlbV9ncm91cCA9IG50aWxl<wbr>KGRlY2lsZV9zY29yZV9wY3QsMTApKQ<wbr>0KDQpjb2xuYW1lcyhwcmVkLmgyMC5j<wbr>YXNlKVs3OjhdPWMoJ09sZCBTY29yZS<wbr>BEZWNpbGUnLCAnTmV3IFNjb3JlIERl<wbr>Y2lsZScpDQoNCiNBcHBseSBkaWZmZX<wbr>JlbnQgdGhyZXNob2xkcyAob3VycyBh<wbr>bmQgY29tcGFzIG9uZSkNCg0KI1VzZS<wbr>B0aGUgY2FzZSBpbiB0aGUgYXJ0aWNs<wbr>ZXMgd2hlcmUgdGhlIGRpc2NyZXBlbm<wbr>NpZXMgYmV0d2VlbiB0d28gcGVvcGxl<wbr>IHdlcmUgYWJzdXJkDQoNCnNxbGRmKC<wbr>JzZWxlY3QgKiANCiAgICAgIGZyb20g<wbr>J3ByZWQuaDIwLmNhc2UnDQogICAgIC<wbr>B3aGVyZSBkZWNpbGVfc2NvcmVfcGN0<wbr>PjAuNDMgYW5kIGRlY2lsZV9zY29yZV<wbr>9wY3QgPCAwLjU4IA0KICAgICAgICAg<wbr>ICAgYW5kIGlkIGluICgyNTkzLDEwOD<wbr>A3KQ0KICAgICAgICBvcmRlciBieSBk<wbr>ZWNpbGVfc2NvcmVfcGN0IGRlc2MiKQ<wbr>0KDQoNCiMgSW4gdGhpcyBleGFtcGxl<wbr>LCB0aGUgRmVtYWxlLCBBZnJpY2FuLU<wbr>FtZXJpY2FuIHdvdWxkIGdvIGZyb20g<wbr>NyB0byA2ICAoc3RheSBNZWRpdW0pIG<wbr>FuZCBDYXVjYXNpYW4gNyB0byA4IChN<wbr>ZWRpdW0gdG8gaGlnaCkNCiMjIyBGb3<wbr>IgdGhlIHB1cnBvc2Ugb2YgdGhlIGRl<wbr>bW8sIHdvdWxkIGJlIGdvb2QgdG8gZm<wbr>luZCBhbiBleGFtcGxlIHdpdGggYSBz<wbr>d2l0Y2guLiBCdXQsIHJlYWxseSwgb2<wbr>5lIGV4YW1wbGUgZG9lc24ndCBzYXkg<wbr>YW55dGhpbmcgYWJvdXQgdGhlIGFsZ2<wbr>8sIHRoZSBGTlIsIFRQUiBkb2VzLg0K<wbr>DQoNCg0KDQpgYGANCg==</div>
+
+
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+
+</body></html>

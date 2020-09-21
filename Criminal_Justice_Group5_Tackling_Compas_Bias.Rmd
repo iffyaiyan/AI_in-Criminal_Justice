@@ -1,0 +1,721 @@
+---
+title: "Criminal Justice- Group 5 / Tackling Bias in Compas Algorithm"
+output: html_notebook
+---
+
+```{r}
+# Author: Jonas Isenegger
+# Last update: 21.09.2020
+
+#Acknowledgment: 
+#-Original Study that highlighted the bias as well as the data can be found here : https://github.com/propublica/compas-analysis
+#-This has been done during the DataEthics for Next Gen AI two days hackathon. It is a proof of concept and not a final product. Do not share or use without permission from the author.
+
+
+```
+
+
+
+```{r}
+
+
+#Install libraries
+# install.packages("dplyr")
+# install.packages("ggplot2")
+# install.packages("DataExplorer")
+# install.packages('fairness')
+# install.packages("survival")
+# install.packages("ggfortify")
+# install.packages("h2o")
+# install.packages("sqldf")
+# install.packages("reshape")
+  
+
+
+#Load libraries
+library(dplyr)
+library(ggplot2)
+library(DataExplorer)
+library(fairness)
+library(survival)
+library(ggfortify)
+library(h2o)
+library(sqldf)
+library(reshape)
+
+
+
+project_path <- "C:/Users/Jonas/Documents/Gradiant AI/AI Ethics/Datasets_crime/compas-analysis"
+```
+
+
+
+```{r ------------------------- SOME CUSTOM FUNCTIONS (run as is)---------------------------------------}
+
+#--- Some Custom Functions--- 
+
+custom.summary.cont <- function(dataFrame){
+  
+  n.miss        <- unlist(lapply(dataFrame, function(x){length(which(is.na(x)))}))
+  n.non.miss    <- rep(nrow(dataFrame), ncol(dataFrame)) - n.miss
+  perc.miss <- (n.miss/rep(nrow(dataFrame), ncol(dataFrame)))*100
+  unique.values <- unlist(lapply(dataFrame, function(x){return(length(unique(x)))}))
+  n.max         <- unlist(lapply(dataFrame, max, na.rm = TRUE))
+  n.min         <- unlist(lapply(dataFrame, min, na.rm = TRUE))
+  n.mean        <- unlist(lapply(dataFrame, mean, na.rm = TRUE))
+  n.median      <- unlist(lapply(dataFrame, median, na.rm = TRUE))
+  n.IQR         <- unlist(lapply(dataFrame, IQR, na.rm = TRUE))
+  n.sd          <- unlist(lapply(dataFrame, sd, na.rm = TRUE))
+  df.quantile   <- do.call(rbind, lapply(dataFrame, quantile, probs=seq(0,1,0.1), na.rm=TRUE))
+  
+  colnames(df.quantile) <- paste("P", colnames(df.quantile), sep="_")
+  df.result             <- cbind(n.non.miss, n.miss, perc.miss, unique.values, n.max, n.min, n.mean, n.median, n.IQR, n.sd, df.quantile)
+  colnames(df.result)   <- c("N", "nb_of_Miss", "pct_of_Missing","Unique_Values","Max", "Min", "Mean", "Median", "IQR","SD" ,colnames(df.quantile))
+  
+  return(df.result)
+}
+
+custom.summary.cat <- function(dataFrame){
+  
+  n.miss        <- unlist(lapply(dataFrame, function(x){length(which(x==''))}))
+  n.non.miss    <- rep(nrow(dataFrame), ncol(dataFrame)) - n.miss
+  perc.miss <- (n.miss/rep(nrow(dataFrame), ncol(dataFrame)))*100
+  unique.values <- unlist(lapply(dataFrame, function(x){return(length(unique(x)))}))
+  
+  df.result <- cbind(n.non.miss, n.miss, perc.miss, unique.values)
+  colnames(df.result) <- c("N", "# of Miss", "% of Missing", "Unique")
+  return(df.result)
+  
+}
+```
+
+
+
+```{r}
+##load the dataset
+
+dataset<- read.csv("~/Gradiant AI/AI Ethics/Datasets_crime/compas-analysis/compas-scores-two-years.csv")
+
+#--- Convert integer and integer64 variables to numeric type ---
+dataset[sapply(dataset, class) %in% c("integer","integer64")] <- lapply(dataset[sapply(dataset, class) %in% c("integer","integer64")], as.numeric)	
+
+#--- Transform character to factor ---
+df.data=as.data.frame(unclass(dataset))
+
+
+```
+
+
+
+```{r -----------------EXPLORE DATASET (run as is, optional exploration of features distributions)---------------}
+
+
+
+#--- Extracting the default class of all the variables --- 
+
+var.names.class     <- unlist(lapply(df.data, class))
+df.var.names.class  <- cbind.data.frame(names(var.names.class), var.names.class)
+
+colnames(df.var.names.class) <- c("names", "class")
+rownames(df.var.names.class) <- NULL
+
+#--- Extracting unique levels for each variable ---
+
+unique.values         <- unlist(lapply(df.data, function(x){return(length(unique(x)))}))
+df.var.unique.values  <- cbind.data.frame(names(unique.values), unique.values)
+
+colnames(df.var.unique.values) <- c("names", "unique_values")
+rownames(df.var.unique.values) <- NULL
+
+
+#--- Summary statistics ---
+
+index.numeric <- which(var.names.class %in% c('numeric','integer','num'))
+index.factor <- which(var.names.class %in% c('factor'))
+
+numeric.vars <- colnames(df.data[,index.numeric])
+factor.vars <- colnames(df.data[,index.factor])
+
+
+stats.cont.vars <- as.data.frame(custom.summary.cont(df.data[,index.numeric]))
+stats.cat.vars  <- as.data.frame(custom.summary.cat(df.data[,index.factor]))
+
+write.csv(stats.cont.vars, paste0(project_path,"/R_OUTPUT/Continuous_Variables_Summary.csv"))
+write.csv(stats.cat.vars, paste0(project_path,"/R_OUTPUT/Categorical_Variables_Summary.csv"))
+
+write.csv(df.var.names.class,paste0(project_path,"/R_OUTPUT/df_var_names_class.csv"))
+
+
+#Identify variables with 100% missing data
+var.only.miss <- row.names(stats.cont.vars[which(stats.cont.vars$pct_of_Missing == 100),])
+
+
+###----High level automated graphiques---###
+
+sqldf("select race, sum(two_year_recid)*1.00/count(*) from 'df.data' group by 1 order by 1")
+
+plot_missing(df.data)
+plot_bar(df.data)
+plot_histogram(df.data)
+plot_qq(df.data, sampled_rows = 1000L)
+qq_data= df.data[,c("decile_score","decile_score.1","score_text", "two_year_recid","sex","age" ,"age_cat","race", "juv_fel_count","juv_misd_count","juv_other_count","priors_count","c_charge_degree","c_charge_desc","priors_count.1")]
+plot_qq(qq_data, by = "race", sampled_rows = 5000L)
+
+
+plot_correlation(qq_data, maxcat = 7L)
+
+# We can see that African American population is younger and committed more juvenile crime in average (link to socio-demo??). In addition , African American tend to have a higher correlation with charge degree (F) while caucasian have a higher correlation with charge degree (M). We did not look if the difference is significant at this stage, those are just personal notes.
+
+```
+
+NOTES:
+
+We can see that the dataset is not balanced between "Sex" and "Race. This could, and will, lead to some bias in terms of the model ability to perform for the minority populations.
+
+We can also see that the "actual" reoffense rate is different within the "race" and "Sex". The difference of reoffense rate is not the scope of this exercise as we would require much more data to control for absent factors that influence crime such as socio-economic variables. We also have to mention that the difference of reoffense rate between the races might also be due to the vicious circle of biased predictive policing algorithm. One could validate our assumption by looking at the crime rate standardized by the time spend on certain neighborhood having a majority of African Americans or Caucasian people. 
+
+This code will not address the underlying bias in the data but the bias made by the COMPAS algorithm. 
+
+In this code, we will:
+1) Show how the COMPAS Algorithm tend to be more conservative with African Americans (meaning that it will tend to overly score African Americans with an High risk compared to Caucasians)
+2) Propose a correction of the algorithm to ensure that the so called "race" are equal in terms of the mistakes made by the algorithm
+3) Show the difference in score .. 
+
+
+Limitations:
+Violent crimes are not analysed specifically due to time constraints
+Bias against sex won't be analyse as well due to time constraints
+
+
+```{r Housekeeping}
+
+#--- Define your target variable name [Mandatory input] ---
+
+trgt_var="two_year_recid"
+
+#--- Define columns to exclude from explanatory variables BUT link back to predictions afterwards ---
+    
+    trgt.short <- c('id',
+                    'decile_score',
+                   'decile_score.1',
+                    'score_text',
+                    'start',
+                    'end',
+                    'event',
+                    trgt_var
+                    )
+
+#--- Define columns to exclude from explanatory variables ---
+
+    trgt.long <- c(trgt.short,
+                    'name',
+                    'first',
+                    'last',
+                    'dob',
+                    'days_b_screening_arrest',
+                    'c_jail_in',
+                    'c_jail_out',
+                    'c_case_number',
+                    'c_days_from_compas',
+                    'r_case_number',
+                    'r_charge_degree',
+                    'r_days_from_arrest',
+                    'r_offense_date',
+                    'r_charge_desc',
+                    'r_jail_in',
+                    'r_jail_out',
+                    'violent_recid',
+                    'is_violent_recid',
+                    'vr_case_number',
+                    'vr_charge_degree',
+                    'vr_offense_date',
+                    'vr_charge_desc',
+                    'type_of_assessment',
+                    'screening_date',
+                    'v_type_of_assessment',
+                    'v_decile_score',
+                    'v_score_text',
+                    'v_screening_date',
+                    'in_custody',
+                    'out_custody',
+                   'is_recid',
+                   'compas_screening_date',
+                   'c_offense_date',
+                   'c_arrest_date'
+                   
+                      )
+  
+  #--- setup index for target variables---
+
+index.trgt.short <- which(colnames(df.data) %in% trgt.short )    
+index.trgt.long <- which(colnames(df.data) %in% trgt.long ) 
+
+### factor that should be dates
+# 'compas_screening_date',
+# 'c_jail_in',
+# 'c_jail_out',
+# 'c_offense_date',
+# 'c_arrest_date',
+# 'screening_date',
+# 'in_custody',
+# 'out_custody',
+
+
+df.data.fe<- cbind(df.data[ ,index.trgt.short],df.data[,-index.trgt.long])
+colnames(df.data.fe)
+
+
+```
+
+
+
+
+
+```{r 1) Compute Performance metrics of COMPAS Algorithm by race }
+
+sqldf("select distinct score_text, decile_score from 'df.data.fe' order by 2 ")
+# Note: We will assume the member who scores medium and High are predicted as recidiv=1
+
+
+#--- Apply desired threshold ---
+# Proxy of decision for COMPAS score
+    df.data.fe$pred_compas=ifelse(df.data.fe$decile_score >= 5 , 1, 0) 
+# Proxy of "probability" to explore the impact of different cutoff thresholds on the errors/performance
+    df.data.fe$decile_score_pct=df.data.fe$decile_score/10
+    
+    
+    
+#--- Build prediction dataset
+    a=as.data.frame(df.data.fe$id) #link back to member id
+    eval(parse(text=paste0("b=as.data.frame(df.data.fe$",trgt_var,")"))) #link back to taret variable
+    c=as.data.frame(df.data.fe$decile_score_pct) # include probability 
+    d=as.data.frame(as.numeric(df.data.fe$pred_compas)) # keep automated predicted value based on h2o optimal f1/f2 functions
+    e=as.data.frame(df.data.fe$race)
+    f=as.data.frame(df.data.fe$sex)
+   
+    pred_table=as.data.frame(cbind(a,b,c,d,e,f))
+    rm(a,b,c,d,e,f)
+    
+    #Rename columns
+      colnames(pred_table)=c("id",paste0(trgt_var),"decile_score_pct","pred_compas","race","gender")
+
+ #-- Compute some performance metrics (including TPR and FNR) for several cutoffs ---
+  
+    ## Function  
+         find_threshold <- function(pred_table, from=0.00, to=1, by=0.01) {
+  result=NULL
+    for (threshold in seq(from=from, to=to, by=by)) {
+     v <- rep(NA, nrow(pred_table))
+      v <- ifelse(pred_table$decile_score_pct >= threshold & pred_table$two_year_recid == 1, "TP", v)
+      v <- ifelse(pred_table$decile_score_pct >= threshold & pred_table$two_year_recid == 0, "FP", v)
+      v <- ifelse(pred_table$decile_score_pct < threshold & pred_table$two_year_recid == 1, "FN", v)
+      v <- ifelse(pred_table$decile_score_pct < threshold & pred_table$two_year_recid == 0, "TN", v)
+
+      gd_cl_rate=round(sum(v %in% c("TP","TN"))/length(v),digits=4)
+      precision=round(sum(v %in% c("TP"))/sum(v %in% c("TP","FP")),digits=4)
+      true_neg_rate=round(sum(v %in% c("TN"))/sum(v %in% c("TN","FN")),digits=4)
+      t_captured=round(sum(v %in% c("TP"))/sum(v %in% c("TP","FN")),digits=4)
+      pct_ctct=round(sum(v %in% c("TP","FP"))/length(v),digits=4)
+      FPR=round(sum(v %in% c("FP"))/sum(v %in% c("TN","FP")),digits=4)
+      FNR=round(sum(v %in% c("FN"))/sum(v %in% c("FN","TP")),digits=4)
+      #lift=round((precision-(sum(v %in% c("TP","FN"))/length(v)))/(sum(v %in% c("TP","FN"))/length(v)),digits=4)
+      lift=t_captured/pct_ctct
+      
+      
+      perf.matrix=data.frame(threshold,gd_cl_rate,lift,precision,true_neg_rate,t_captured,pct_ctct,FPR,FNR)
+
+      result=rbind(result,perf.matrix)
+
+    }
+  return(result)
+         }
+    
+  
+    
+  #Use function for overall
+    find_threshold_table=find_threshold( pred_table=pred_table) 
+  # Look at performances per group  
+    find_threshold_table_African_American=find_threshold( pred_table=pred_table[pred_table$race=="African-American",])
+    find_threshold_table_Caucasian=find_threshold( pred_table=pred_table[pred_table$race=="Caucasian",])
+    find_threshold_table_Other=find_threshold( pred_table=pred_table[pred_table$race=="Other",])
+    find_threshold_table_Hispanic=find_threshold( pred_table=pred_table[pred_table$race=="Hispanic",])
+    find_threshold_table_Native_American=find_threshold( pred_table=pred_table[pred_table$race=="Native American",])
+    find_threshold_table_Asian=find_threshold( pred_table=pred_table[pred_table$race=="Asian",])
+ 
+
+    #save output:
+      write.csv(find_threshold_table_African_American,paste0(project_path,"/R_OUTPUT/find_threshold_table_African_American.csv"));
+      write.csv(find_threshold_table_Caucasian,paste0(project_path,"/R_OUTPUT/find_threshold_table_Caucasian.csv"));
+      write.csv(find_threshold_table_Other,paste0(project_path,"/R_OUTPUT/find_threshold_table_Other.csv"));
+      write.csv(find_threshold_table_Hispanic,paste0(project_path,"/R_OUTPUT/find_threshold_table_Hispanic.csv"));
+      write.csv(find_threshold_table_Native_American,paste0(project_path,"/R_OUTPUT/find_threshold_table_Native_American.csv"));
+      write.csv(find_threshold_table_Asian,paste0(project_path,"/R_OUTPUT/find_threshold_table_Asian.csv"));
+    
+    #Apply the same threshold to all groups
+    perf_overall=as.data.frame(cbind('Overall',find_threshold_table[find_threshold_table$threshold==0.5,]))
+    perf_African_American=as.data.frame(cbind('African American',find_threshold_table_African_American[find_threshold_table_African_American$threshold==0.5,]))
+    perf_Caucasian=as.data.frame(cbind('Caucasian',find_threshold_table_Caucasian[find_threshold_table_Caucasian$threshold==0.5,]))
+    perf_Other=as.data.frame(cbind('Other',find_threshold_table_Other[find_threshold_table_Other$threshold==0.5,]))
+    perf_Hispanic=as.data.frame(cbind('Hispanic',find_threshold_table_Hispanic[find_threshold_table_Hispanic$threshold==0.5,]))
+    perf_Native_American=as.data.frame(cbind('Native American',find_threshold_table_Native_American[find_threshold_table_Native_American$threshold==0.5,]))
+    perf_Asian=as.data.frame(cbind('Asian',find_threshold_table_Asian[find_threshold_table_Asian$threshold==0.5,]))
+    
+    ##rename columns
+    colnames(perf_overall)[1]=c("group")
+    colnames(perf_African_American)[1]=c("group")
+    colnames(perf_Caucasian)[1]=c("group")
+    colnames(perf_Other)[1]=c("group")
+    colnames(perf_Hispanic)[1]=c("group")
+    colnames(perf_Native_American)[1]=c("group")
+    colnames(perf_Asian)[1]=c("group")
+    
+    
+    #Merge performance metrics for given threshold
+    perf_all=as.data.frame(rbind(perf_overall,perf_African_American,perf_Caucasian,perf_Other,perf_Hispanic,perf_Native_American,perf_Asian))
+    head(perf_all)
+    
+    
+    #FPR : Wrongly accused
+    
+    #FNR: Missout
+    
+  
+    print(perf_all)
+    
+    #Risk of wrongly assigning med/high risk to each group
+    ggplot(perf_all,aes(x=group,y=FPR))+geom_bar(stat='identity')
+    
+    #Risk of wrongly assigning a low score ( missing to detect someone who will re-offence) 
+    ggplot(perf_all,aes(x=group,y=FNR))+geom_bar(stat='identity')
+
+```
+
+
+As we can see, the COMPAS algorithm is not fair amongst races:
+-45% of African American that were wrongly scored as Med/High (but did not recidiv within the following 2 years) while only 23% for Caucasians. 
+-47% of Caucasians that were scored as low risk did recidiv within 2 years while only 27% for African American.
+
+
+How can we make the algorithm more fair? 
+
+It is not an easy task to build an algorithm that would maximize the performance while treating all races, gender equally. There is a tradeoff, and, as a society, we need to choose what should we prioritize. 
+
+
+In the next section, we will show how fine tuning the algorithm for each group (applying a different cutoff) will allow us to both keep a decent performance (compare to the baseline - COMPAS) while having an AI more fair regarding the distribution of errors amongst races. 
+
+
+
+
+
+
+
+```{r -- 2 ) Tweaking the COMPAS algorithm to reduce bias amongst races}
+
+#Build a naive model for the purpose of explanation
+
+
+#--- Transform he binary numeric target variables to factor (comment if not needed) ---
+#Note: H2o package require the type "factor" to train classification models
+
+    eval(parse(text=paste0("if(length(unique(df.data$",trgt_var,")) == 2 & class(df.data.fe$",trgt_var,") %in% c('numeric')){df.data.fe$",trgt_var,"=as.factor(df.data.fe$",trgt_var,")}")))
+
+#update the list of variables to exclude from the training dataset
+trgt.long=c(trgt.long,"decile_score_pct","pred_compas","c_charge_desc","race","gender")
+
+#--- Split Dataset---
+set.seed(12)
+val_percent <- 0.3
+val_idx     <- sample(1:nrow(df.data.fe))[1:round(nrow(df.data.fe) * val_percent)]
+
+# partition the data
+df.train <- df.data.fe[-val_idx, ]
+df.val <- df.data.fe[ val_idx, ]
+
+#-- note: One should try to oversample minority race and undersample majority races..
+
+
+#--- Start up the H2O cluster locally on your machine ---
+h2o.init(nthreads = -1, #Number of threads -1 means use all cores on your machine
+         max_mem_size = "6G")  #max mem size is the maximum memory to allocate to H2O
+ 
+   #--- Transform dataset into H20 object ---
+  df.train.h20 <-as.h2o(df.train)  #h2o.describe(df.train.h20)
+  df.val.h20 <-as.h2o(df.val)
+  
+  df.all.h2o <-as.h2o(df.data.fe)
+ 
+  #--- Define taret (y) and explanatory variables (x) ---
+  y <- trgt_var 
+  x <- setdiff(names(df.train.h20), trgt.long)
+
+  
+  #--- Train Models with h2o.autoML() for automated machine learning ---
+  # Docs: https://www.rdocumentation.org/packages/h2o/versions/3.22.1.1/topics/h2o.automl
+  
+  st_train=Sys.time()
+  
+  #--- Train models and store models in h2o object "aml"---
+  aml <- h2o.automl(y = y, x = x,
+                    training_frame = df.train.h20,
+                    validation_frame= df.val.h20,
+                    # leaderboard_frame= df.test.h20,
+                    balance_classes=TRUE,
+                    #exclude_algos = c("StackedEnsemble","DRF"),
+                    #stopping_metric= "lift_top_group", 
+                    #sort_metric = "AUC",
+                    max_runtime_secs = 99999999,
+                    max_models = 8,
+                    seed = 23535)
+  
+  #--- Print time span of model training ---
+  end_train=Sys.time()
+  print(paste0("H2o.automl() took ",end_train-st_train," secondes to complete"))
+  
+  
+  #--- Print Leaderboard: models trained ranked by performances ---
+  lb=aml@leaderboard
+  
+  #--- Save Leaderboard ---
+  write.csv(as.data.frame(lb),paste0(project_path,"leaderboard.csv"));
+
+    #--- check for under/over fitting (Gap between train, val, test) ---
+    print('AUC of leader model on training dataset :')
+          h2o.auc(h2o.performance(aml@leader, newdata=df.train.h20))
+    print('AUC of leader model on validation dataset:')
+          h2o.auc(h2o.performance(aml@leader, newdata=df.val.h20))
+    print('GAP between training and validation dataset:')
+          h2o.auc(h2o.performance(aml@leader, newdata=df.train.h20))-h2o.auc(h2o.performance(aml@leader, newdata=df.val.h20))
+    
+   
+  #--- Display features importance ---
+  
+  #Note:  -Useful to detect target leaking or manual segmentation needed
+  #       -Won't work if leader model is a Stacked Ensemble. Can temporary exclude those in training to get variable importance
+    
+      
+    var_imp=aml@leader@model$variable_importances
+    h2o.varimp_plot(aml@leader,num_of_features = 20)
+    write.csv(var_imp,paste0(project_path,"var_imp_new.csv")) #Save variable importance
+    write.csv(aml@leader@model$standardized_coefficient_magnitudes,paste0(project_path,"/R_OUTPUT/coeff_magnitude_new.csv")) #Save variable importance
+    
+  
+    #--- Save Leader Model---
+    model_leader_path <- h2o.saveModel(object=aml@leader, path=project_path, force=TRUE)
+    print(model_leader_path)
+    write.csv(print(model_leader_path),paste0(project_path,"model_leader_path.csv"))
+
+    
+  #--- Final performances metrics on test set ---
+      
+    #--- Prediction on validation set ---
+    # pred.h20 <- h2o.predict(aml@leader, df.val.h20)
+    # 
+    # #--- Build prediction dataset
+    # a=as.data.frame(df.val.h20$id) #link back to member id
+    # eval(parse(text=paste0("b=as.data.frame(df.val.h20$",trgt_var,")"))) #link back to taret variable
+    # c=as.data.frame(pred.h20$p1) # include probability 
+    # d=as.data.frame(as.numeric(pred.h20$predict)) # keep automated predicted value based on h2o optimal f1/f2 functions
+    # e=as.data.frame(df.val.h20$race)
+    # f=as.data.frame(df.val.h20$sex)
+    
+     pred.h20 <- h2o.predict(aml@leader, df.all.h2o)
+  
+    #--- Build prediction dataset
+    a=as.data.frame(df.all.h2o$id) #link back to member id
+    eval(parse(text=paste0("b=as.data.frame(df.all.h2o$",trgt_var,")"))) #link back to taret variable
+    c=as.data.frame(pred.h20$p1) # include probability 
+    d=as.data.frame(as.numeric(pred.h20$predict)) # keep automated predicted value based on h2o optimal f1/f2 functions
+    e=as.data.frame(df.all.h2o$race)
+    f=as.data.frame(df.all.h2o$sex)
+    
+    pred_table=as.data.frame(cbind(a,b,c,d,e,f))
+    rm(a,b,c,d,e,f)
+    
+    #Rename columns
+      colnames(pred_table)=c("id",paste0(trgt_var),"decile_score_pct","pred_compas","race","gender")
+
+      
+ #-- Find Probability Threshold ---
+    find_threshold_table=find_threshold( pred_table=pred_table) # Get key performance metrics for wanted probability cut-off points
+    find_threshold_table_African_American=find_threshold( pred_table=pred_table[pred_table$race=="African-American",])
+    find_threshold_table_Caucasian=find_threshold( pred_table=pred_table[pred_table$race=="Caucasian",])
+    find_threshold_table_Other=find_threshold( pred_table=pred_table[pred_table$race=="Other",])
+    find_threshold_table_Hispanic=find_threshold( pred_table=pred_table[pred_table$race=="Hispanic",])
+    find_threshold_table_Native_American=find_threshold( pred_table=pred_table[pred_table$race=="Native American",])
+    find_threshold_table_Asian=find_threshold( pred_table=pred_table[pred_table$race=="Asian",])
+ 
+      #save output:
+      write.csv(find_threshold_table_African_American,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_African_American.csv"));
+      write.csv(find_threshold_table_Caucasian,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_Caucasian.csv"));
+      write.csv(find_threshold_table_Other,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_Other.csv"));
+      write.csv(find_threshold_table_Hispanic,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_Hispanic.csv"));
+      write.csv(find_threshold_table_Native_American,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_Native_American.csv"));
+      write.csv(find_threshold_table_Asian,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_Asian.csv"));
+      write.csv(find_threshold_table,paste0(project_path,"/R_OUTPUT/H2o_find_threshold_table_overall.csv"));
+  
+      
+      
+  #Create Performance table for replicate of COMPAS score  
+      #NOTES: The cutoffs were chosen in order to have an equal error rate amongst races..
+    
+    perf_overall=as.data.frame(cbind('Overall',find_threshold_table[find_threshold_table$threshold==0.5,]))
+    perf_African_American=as.data.frame(cbind('African American',find_threshold_table_African_American[find_threshold_table_African_American$threshold==0.5,]))
+    perf_Caucasian=as.data.frame(cbind('Caucasian',find_threshold_table_Caucasian[find_threshold_table_Caucasian$threshold==0.5,]))
+    perf_Other=as.data.frame(cbind('Other',find_threshold_table_Other[find_threshold_table_Other$threshold==0.5,]))
+    perf_Hispanic=as.data.frame(cbind('Hispanic',find_threshold_table_Hispanic[find_threshold_table_Hispanic$threshold==0.5,]))
+    perf_Native_American=as.data.frame(cbind('Native American',find_threshold_table_Native_American[find_threshold_table_Native_American$threshold==0.5,]))
+    perf_Asian=as.data.frame(cbind('Asian',find_threshold_table_Asian[find_threshold_table_Asian$threshold==0.5,]))
+    
+    colnames(perf_overall)[1]=c("group")
+    colnames(perf_African_American)[1]=c("group")
+    colnames(perf_Caucasian)[1]=c("group")
+    colnames(perf_Other)[1]=c("group")
+    colnames(perf_Hispanic)[1]=c("group")
+    colnames(perf_Native_American)[1]=c("group")
+    colnames(perf_Asian)[1]=c("group")
+    
+    
+    #Merge performances metrics
+    perf_all_h2o=as.data.frame(rbind(perf_African_American,perf_Caucasian,perf_Other,perf_Hispanic,perf_Native_American,perf_Asian))
+    
+        
+      
+      
+        
+  #Create Performance table for "normalized" score  
+      #NOTES: The cutoffs were chosen in order to have an equal error rate amongst races..
+    
+    perf_overall=as.data.frame(cbind('Overall',find_threshold_table[find_threshold_table$threshold==0.5,]))
+    perf_African_American=as.data.frame(cbind('African American',find_threshold_table_African_American[find_threshold_table_African_American$threshold==0.56,]))
+    perf_Caucasian=as.data.frame(cbind('Caucasian',find_threshold_table_Caucasian[find_threshold_table_Caucasian$threshold==0.43,]))
+    perf_Other=as.data.frame(cbind('Other',find_threshold_table_Other[find_threshold_table_Other$threshold==0.43,]))
+    perf_Hispanic=as.data.frame(cbind('Hispanic',find_threshold_table_Hispanic[find_threshold_table_Hispanic$threshold==0.44,]))
+    perf_Native_American=as.data.frame(cbind('Native American',find_threshold_table_Native_American[find_threshold_table_Native_American$threshold==0.59,]))
+    perf_Asian=as.data.frame(cbind('Asian',find_threshold_table_Asian[find_threshold_table_Asian$threshold==0.4,]))
+    
+    colnames(perf_overall)[1]=c("group")
+    colnames(perf_African_American)[1]=c("group")
+    colnames(perf_Caucasian)[1]=c("group")
+    colnames(perf_Other)[1]=c("group")
+    colnames(perf_Hispanic)[1]=c("group")
+    colnames(perf_Native_American)[1]=c("group")
+    colnames(perf_Asian)[1]=c("group")
+    
+    
+    #Merge performances metrics
+    perf_all_h2o_nrmlz=as.data.frame(rbind(perf_African_American,perf_Caucasian,perf_Other,perf_Hispanic,perf_Native_American,perf_Asian))
+    head(perf_all_h2o_nrmlz)
+    
+    
+    #Save Performance metrics by race for COMPAS and Our Algorithm
+    write.csv(perf_all_h2o,paste0(project_path,"/R_OUTPUT/Perf_metrics_byrace_COMPAS.csv"));
+    write.csv(perf_all_h2o_nrmlz,paste0(project_path,"/R_OUTPUT/Perf_metrics_byrace_ourAlgo.csv"));
+
+### Display  Old Versus new metrics  /// notes: Add title, + data points + axis label // + performance variation
+
+    #Risk of wrongly assigning med/high risk to each group
+    
+    #COmpas
+    ggplot(perf_all,aes(x=group,y=FPR))+geom_bar(stat='identity')
+    #After tweak
+    ggplot(perf_all_h2o_nrmlz,aes(x=group,y=FPR))+geom_bar(stat='identity')
+    
+   
+    
+    
+    #Risk of wrongly assigning a low score ( missing to detect someone who will re-offence) 
+     #Compas
+    ggplot(perf_all,aes(x=group,y=FNR))+geom_bar(stat='identity')
+    # After Tweak
+    ggplot(perf_all_h2o_nrmlz,aes(x=group,y=FNR))+geom_bar(stat='identity')
+    
+    
+    a=as.data.frame(perf_all_h2o[perf_all_h2o$group %in% c('African American','Caucasian'), c('group')])
+    b=as.data.frame(perf_all_h2o[perf_all_h2o$group %in% c('African American','Caucasian'), c('gd_cl_rate')])
+    c=as.data.frame(perf_all_h2o_nrmlz[perf_all_h2o_nrmlz$group %in% c('African American','Caucasian'), c('gd_cl_rate')])
+    d=as.data.frame(perf_all_h2o[perf_all_h2o$group %in% c('African American','Caucasian'), c('FPR')])
+    e=as.data.frame(perf_all_h2o_nrmlz[perf_all_h2o_nrmlz$group %in% c('African American','Caucasian'), c('FPR')])
+    f=as.data.frame(perf_all_h2o[perf_all_h2o$group %in% c('African American','Caucasian'), c('FNR')])
+    g=as.data.frame(perf_all_h2o_nrmlz[perf_all_h2o_nrmlz$group %in% c('African American','Caucasian'), c('FNR')])
+    
+    
+  
+    
+    table_graph_final=cbind(a,b,c,d,e,f,g)
+    colnames(table_graph_final)=c("race","Good Classification Rate COMPAS", "Good Classification Rate COMPAS Fair", "FPR COMPAS","FPR COMPAS Fair","FNR COMPAS","FNR COMPAS Fair")
+    
+  #Unpivot Table
+    table_graph_final2 <- melt(table_graph_final, id = c("race"))
+    colnames(table_graph_final2)[2:3]=c('Performance and Fairness Metrics','Value (%)')
+    
+    table_graph_final2$'Value (%)'=table_graph_final2$'Value (%)'*100
+    table_graph_final2$'Performance and Fairness Metrics'=as.factor(table_graph_final2$'Performance and Fairness Metrics')
+    
+    write.csv(x = table_graph_final2,paste0(project_path,"/R_OUTPUT/final_comparison_error.csv"));
+    write.csv(x = table_graph_final,paste0(project_path,"/R_OUTPUT/final_comparison_error2.csv"));
+  #Display Overall graph !!!! Need to rework this , doesn't work..!!!  
+  ggplot(table_graph_final2, aes(factor('Performance and Fairness Metrics'), 'Value (%)', fill = race )) + 
+  geom_bar(stat="identity", position = "dodge") + 
+  scale_fill_brewer(palette = "Set1")
+  
+  
+
+    
+#--- Close H2o Cluster ---
+h2o.shutdown(prompt = FALSE)
+    
+
+
+```
+
+
+
+We can see an improvement in terms of bias amongst races. 
+
+For a reduction in Good classification rate of less than 1% (0.75 for Caucasian an 0.28% for African American), we reduced drastically the bias of error. 
+-With COMPAS algorithm, African American were 2.14 times more likely to be scored erroneously as future recidivist when compared to African American. African American have now the same chance of being faulty scored as future recidivist by the algorithm (22%). 
+-With COMPAS algorithm, Caucasians were 2.25 times more likely than African American to be erroneously scored as non future recidivist (low). This number is now back to 1.06.
+
+
+
+
+
+Limitations: 
+Not enough data yet in the validation set for Asian and Native American communities.. might want to increase it an re-run it
+Would need to do the same exercise for Gender 
+
+
+
+
+```{r Getting an example for the "Demo" }
+
+
+#Apply deciles by group in order to see the change in the score, decile? Will work for showcase but would need to put more thinking into this to understand the impact.
+
+pred.h20.case= mutate(pred_table, decile_rank = ntile(pred_table$decile_score_pct,10))
+
+
+#### quantile rank of the column by group
+pred.h20.case= pred.h20.case %>% group_by(race) %>%
+  mutate(decile_rank_by_Item_group = ntile(decile_score_pct,10))
+
+colnames(pred.h20.case)[7:8]=c('Old Score Decile', 'New Score Decile')
+
+#Apply different thresholds (ours and compas one)
+
+#Use the case in the articles where the discrepencies between two people were absurd
+
+sqldf("select * 
+      from 'pred.h20.case'
+      where decile_score_pct>0.43 and decile_score_pct < 0.58 
+            and id in (2593,10807)
+        order by decile_score_pct desc")
+
+
+# In this example, the Female, African-American would go from 7 to 6  (stay Medium) and Caucasian 7 to 8 (Medium to high)
+### For the purpose of the demo, would be good to find an example with a switch.. But, really, one example doesn't say anything about the algo, the FNR, TPR does.
+
+
+
+
+```

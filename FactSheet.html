@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>Case Study</title>
+  <link href="https://fonts.googleapis.com/css?family=Montserrat+Alternates:300,400,500,600" rel="stylesheet"><link rel='stylesheet' href='https://maxcdn.icons8.com/fonts/line-awesome/1.1/css/line-awesome-font-awesome.min.css'><link rel="stylesheet" href="./style.css">
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<main>
+	<div class="row">
+		<h1 style="margin-top: 2%">Fact Sheet</h1>
+		<div class="column-factsheet">
+			<h1>Information regarding our project:</h1>
+			<ul>
+				<li>This project aims to:</li>
+				<ul>
+					<li>Show how the COMPAS Algorithm tend to be <strong>more conservative</strong> with African Americans (meaning that it will tend to overly score African Americans with an High risk compared to Caucasians).</li>
+					<li> Propose a correction of the algorithm to ensure that the so called “race” are equal in terms of the mistakes made by the algorithm.</li>
+					<li>Show the difference in score.</li>
+				</ul>
+				<li>The error presented on our "Why our score?" page represents the <strong>False Positive Rate</strong>, which is the rate of being wrongly predicted as a future recidivist. </li>	
+				<li>For a reduction in good classification rate of less than 1% (0.75% for Caucasian an 0.28% for African American), we reduced drastically the bias of error.
+				<ul>
+					<li>With COMPAS algorithm, African American were <strong>2.14 times</strong> more likely to be scored erroneously as future recidivist when compared to African American. Now, African American have the <strong>same chance</strong> of being faulty scored as future recidivist by the algorithm (22%).</li>
+					<li>With COMPAS algorithm, Caucasians were <strong>2.25 times</strong> more likely than African American to be erroneously scored as non future recidivist (low). Now, this number is now back to <strong>1.06</strong>.</li>			
+				</ul>
+				<li>It is not an easy task to build an algorithm that would maximize the performance while treating all races, gender equally. There is a tradeoff, and, as a society, we need to choose what <strong>we should prioritize</strong>.</li>				
+		</div>
+		<div class="column-factsheet">
+			<h1>General statistics regarding predictive recidivism algorithms:</h1>
+			<ul>
+				<li>According to <a href="https://advances.sciencemag.org/content/4/1/eaao5580">ScienceAdvances</a> in "The accuracy, fairness, and limits of predicting recidivism" while addresseing biases in the COMPAS algorithm:</li>
+				<ul>
+					<li>Black defendants who did not recidivate were incorrectly predicted to reoffend at a rate of <strong>44.9%</strong>, nearly twice as high as their white counterparts at <strong>23.5%</strong>.</li>
+					<li>White defendants who did recidivate were incorrectly predicted to not reoffend at a rate of <strong>47.7%</strong>, nearly twice as high as their black counterparts at <strong>28.0%</strong>.</li>
+				</ul>
+				<li>According to <a href="https://www.propublica.org/article/how-we-analyzed-the-compas-recidivism-algorithm">PROPUBLICA</a> in "How We Analyzed the COMPAS Recidivism Algorithm"</li>
+				<ul>
+					<li>"The analysis also showed that even when controlling for prior crimes, future recidivism, age, and gender, black defendants were <strong>45 percent more likely</strong> to be assigned higher risk scores than white defendants."</li>
+				</ul>
+			</ul>
+		</div>
+
+	</div>
+</main>
+<!-- partial -->
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/1.9.1/jquery.min.js'></script><script  src="./script.js"></script>
+
+</body>
+</html>
