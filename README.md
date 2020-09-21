@@ -31,6 +31,9 @@ an individual should have been judged
 ### Mentor:
 - Taurean Dyer 
 
+### Blogpost
+https://www.dataethics4all.org/posts/gavel-20
+
 ### Youtube link : 
 https://youtu.be/hdyhdyFovS4
 
